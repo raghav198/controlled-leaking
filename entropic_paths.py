@@ -1,6 +1,5 @@
-from typing import Dict, Set
+from typing import Dict, Optional, Set
 from math import log2
-from coyote.coyote.coyote import *
 
 class Branch:
     def __init__(self, cost: int = 1, probability: float = 0.5):
@@ -23,8 +22,6 @@ def make_tree(index: int, depth: int, cur: Tree = {}):
     cur = make_tree(index * 2 + 1, depth - 1, cur)
     return cur
 
-
-tree = make_tree(1, 2)
 
 def visiting_probabilities(tree: Tree, node: int, acc: float, probabilities: Dict[int, float] = {}):
     probabilities[node] = acc
@@ -90,18 +87,17 @@ def slicing_cost(tree: Tree, slice: Set[int]):
 # for slice in all_slices(tree, {1}):
 #     print(slice, slicing_cost(tree, slice))
 
+if __name__ == '__main__':
+    gcd_tree = {}
+    gcd_tree[1] = Branch(0)
+    gcd_tree[2] = Branch(1)
+    gcd_tree[3] = Branch(1)
+    gcd_tree[4] = Branch(2)
+    gcd_tree[5] = Branch(3)
+    gcd_tree[6] = Branch(2)
+    gcd_tree[7] = Branch(3)
 
+    # TODO: slicing inlines the intermediates, so we need to be aware of that when computing preparation cost for each tree
 
-gcd_tree = {}
-gcd_tree[1] = Branch(0)
-gcd_tree[2] = Branch(1)
-gcd_tree[3] = Branch(1)
-gcd_tree[4] = Branch(2)
-gcd_tree[5] = Branch(3)
-gcd_tree[6] = Branch(2)
-gcd_tree[7] = Branch(3)
-
-# TODO: slicing inlines the intermediates, so we need to be aware of that when computing preparation cost for each tree
-
-for slice in all_slices(gcd_tree, {1}):
-    print(slice, slicing_cost(gcd_tree, slice))
+    for slice in all_slices(gcd_tree, {1}):
+        print(slice, slicing_cost(gcd_tree, slice))
