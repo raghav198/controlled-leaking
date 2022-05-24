@@ -37,17 +37,17 @@ class SliceCalculator:
         self.cur_tag = 0
         self.children: Dict[int, Tuple[int]] = {}
         self.prob: Dict[int, float] = {}
-        self.total_cost: Dict[int, int] = {}
+        self.total_cost: Dict[int, float] = {}
+        self.original_total_cost: Dict[int, float] = {}
         self.optimal_slice: Dict[int, Set[int]] = {}
 
-        self.stack = []
+        self.stack: List[Tuple[Dict[int, float], Dict[int, Set[int]]]] = []
 
     def push(self):
         self.stack.append((self.total_cost.copy(), self.optimal_slice.copy()))
 
     def pop(self):
         self.total_cost, self.optimal_slice = self.stack.pop()
-
 
     def tag(self):
         self.prob[0] = 1
@@ -81,6 +81,7 @@ class SliceCalculator:
         traverse_up(self.tree) # tag and mark costs
         self.prob[self.tree.tag] = 1
         traverse_down(self.tree) # mark probabilities
+        self.original_total_cost = self.total_cost.copy()
 
     def enumerate_children(self):
         if not self.tag_lookup:
@@ -125,22 +126,28 @@ class SliceCalculator:
                     # is it worth it to pull up?
                     thresh = A_tree.cost / (p * (A_cost - x * B_cost + (x - 1) * C_cost))
 
-                    if len(self.stack):
-                        old_cost, _ = self.stack[-1]
-                        old_A = old_cost[A]
-                        old_B = old_cost[A_tree.left.tag]
-                        old_C = old_cost[A_tree.right.tag]
+                    # if len(self.stack):
+                    #     old_cost, _ = self.stack[-1]
+                    #     old_A = old_cost[A]
+                    #     old_B = old_cost[A_tree.left.tag]
+                    #     old_C = old_cost[A_tree.right.tag]
 
-                        print(f'A: {old_A} -> {A_cost} (eA = {old_A - A_cost})')
-                        print(f'B: {old_B} -> {B_cost} (eB = {old_B - B_cost})')
-                        print(f'C: {old_C} -> {C_cost} (eC = {old_C - C_cost})')
-                        print(f'Old: {old_A} = {A_tree.cost} + {old_B} + {old_C}')
-                        print(f'New: {A_cost} vs {A_tree.cost + B_cost + C_cost}')
-                        print(f'Additive failure: {A_tree.cost + B_cost + C_cost - A_cost}')
+                        # print(f'A = {A}, B = {A_tree.left.tag}, C = {A_tree.right.tag}...')
 
-                        old_thresh = A_tree.cost / (p * (old_A - x * old_B + (x - 1) * old_C))
-                        print(f'Threshold: {old_thresh} -> {thresh}')
-                        input()
+                        # print(f'Total A cost if we did not lift (actual should be lower): {A_tree.cost + B_cost + C_cost}')
+                        # print(f'Actual total A cost: {A_cost}')
+
+                        # print(f'A: {old_A} -> {A_cost} (eA = {old_A - A_cost})')
+                        # print(f'B: {old_B} -> {B_cost} (eB = {old_B - B_cost})')
+                        # print(f'C: {old_C} -> {C_cost} (eC = {old_C - C_cost})')
+                        # print(f'Old: {old_A} = {A_tree.cost} + {old_B} + {old_C}')
+                        # print(f'New: {A_cost} vs {A_tree.cost + B_cost + C_cost}')
+                        # print(f'Additive failure: {A_tree.cost + B_cost + C_cost - A_cost}')
+
+                        # old_thresh = A_tree.cost / (p * (old_A - x * old_B + (x - 1) * old_C))
+                        # print(f'Threshold: {old_thresh} -> {thresh}')
+                        # input()
+                        # assert thresh >= old_thresh, f'{A_tree.left.tag, A_tree.right.tag} -> {A}'
 
                     if i <= thresh:    
                         slc.remove(A_tree.left.tag)
@@ -157,29 +164,50 @@ class SliceCalculator:
 
             return slc
 
-        print(f'Combined cost without lifting slices: {self.sliced_cost(tree_idx, left_slice | right_slice)}')
+
 
         left_lifted = check_lifts(left_slice, tree.p_left, tree.left.tag)
         right_lifted = check_lifts(right_slice, tree.p_right, tree.right.tag)
 
-        print(f'Combined cost after lifting: {self.sliced_cost(tree_idx, left_lifted | right_lifted)}')
-        input()
-
         self.optimal_slice[tree_idx] = left_lifted | right_lifted
+
+        # assert self.sliced_cost(tree_idx, left_slice | right_slice) >= self.sliced_cost(tree_idx, left_lifted | right_lifted), f'{tree.left.tag} <- {tree_idx} -> {tree.right.tag}'
 
         return left_lifted | right_lifted
 
     def sliced_cost(self, tree_idx: int, slc: Set[int]) -> float:
-        cost = self.total_cost[tree_idx]
+        cost = 0.
         for vertex in slc:
-            cost -= self.total_cost[vertex] * (1 - self.prob[vertex])
+            cost += self.total_cost[vertex] * self.prob[vertex] / self.prob[tree_idx]
+        
+        stack = [tree_idx]
+        while len(stack):
+            cur = stack.pop()
+            if cur in slc:
+                continue
+            cur_tree = self.tag_lookup[cur]
+            cost += cur_tree.cost
+            if isinstance(cur_tree, Branch):
+                stack.append(cur_tree.left.tag)
+                stack.append(cur_tree.right.tag)
+
+        assert cost > 0, (tree_idx, slc)
         return cost
+
+        # cost = self.original_total_cost[tree_idx]
+        # for vertex in slc:
+        #     cost -= self.total_cost[vertex] * (1 - self.prob[vertex] / self.prob[tree_idx])
+        # assert cost > 0, (tree_idx, slc)
+        # return cost
 
     def update_costs(self):
         self.push()
+        new_cost = {}
         for key in self.total_cost:
-            self.total_cost[key] = self.sliced_cost(key, self.optimal_slice[key])
+            new_cost[key] = self.sliced_cost(key, self.optimal_slice[key])
+        self.total_cost = new_cost
         self.optimal_slice = {}
+
 
 leaves = [Leaf(2) for _ in range(6)]
 D = Branch(leaves[0], leaves[1], factor=0.25, cost=1)
@@ -196,13 +224,15 @@ def complete_tree(depth):
 
 T = complete_tree(6)
 
-def compute_N_slices(T: Tree, N: int) -> List[Set[int]]:
+def compute_N_slices(T: Tree, N: int) -> Tuple[List[Set[int]], float]:
     calc = SliceCalculator(T)
     calc.enumerate_children()
 
     for _ in range(N):
         calc.compute_slice(T.tag)
         calc.update_costs()
+
+    overall_cost = calc.total_cost[T.tag]
 
     slices = [{T.tag}]
     for _ in range(N):
@@ -212,14 +242,20 @@ def compute_N_slices(T: Tree, N: int) -> List[Set[int]]:
             new_slice.update(calc.optimal_slice[vertex])
         slices.append(new_slice)
 
-    return slices[1:]
+    return slices[1:], overall_cost
 
-calc = SliceCalculator(T)
-calc.enumerate_children()
-print(calc.compute_slice(T.tag))
-calc.update_costs()
-print(calc.compute_slice(T.tag))
+# calc = SliceCalculator(T)
+# calc.enumerate_children()
+# print(calc.compute_slice(T.tag))
+# calc.update_costs()
+# print(calc.compute_slice(T.tag))
 
-# print(list(map(len, compute_N_slices(T, 1))))
-# print(list(map(len, compute_N_slices(T, 2))))
-# print(list(map(len, compute_N_slices(T, 3))))
+def expected_cost(t: Tree) -> float:
+    if isinstance(t, Leaf):
+        return t.cost
+    return t.p_left * expected_cost(t.left) + t.p_right * expected_cost(t.right) + t.cost
+
+for i in range(4):
+    print(compute_N_slices(A, i))
+
+print(expected_cost(A))
