@@ -2,22 +2,27 @@ from __future__ import annotations
 from typing import Dict, List, Set, Tuple, Union
 from dataclasses import dataclass
 
+from math import log2
+
+from holla import ChallahTree
+
 
 Tree = Union['Leaf', 'Branch']
 
 @dataclass
 class Leaf:
-    cost: int
+    cost: float
     tag: int = -1
-
+    backref: ChallahTree | None = None
 @dataclass
 class Branch:
 
     left: Tree
     right: Tree
     factor: float
-    cost: int
+    cost: float
     tag: int = -1
+    backref: ChallahTree | None = None
 
     @property
     def p_left(self):
@@ -35,7 +40,7 @@ class SliceCalculator:
         self.tree = tree
         self.tag_lookup: Dict[int, Tree] = {}
         self.cur_tag = 0
-        self.children: Dict[int, Tuple[int]] = {}
+        self.children: Dict[int, Tuple[int, ...]] = {}
         self.prob: Dict[int, float] = {}
         self.total_cost: Dict[int, float] = {}
         self.original_total_cost: Dict[int, float] = {}
@@ -87,9 +92,9 @@ class SliceCalculator:
         if not self.tag_lookup:
             self.tag()
         for key in self.tag_lookup:
-            if isinstance(self.tag_lookup[key], Leaf):
+            if isinstance(tree := self.tag_lookup[key], Leaf):
                 continue
-            self.children[key] = (self.tag_lookup[key].left.tag, self.tag_lookup[key].right.tag)
+            self.children[key] = (tree.left.tag, tree.right.tag)
 
     def compute_slice(self, tree_idx: int = 0) -> Set[int]:
         tree = self.tag_lookup[tree_idx]
@@ -191,7 +196,7 @@ class SliceCalculator:
                 stack.append(cur_tree.left.tag)
                 stack.append(cur_tree.right.tag)
 
-        assert cost > 0, (tree_idx, slc)
+        assert cost > 0, (tree_idx, slc, self.tag_lookup[tree_idx])
         return cost
 
         # cost = self.original_total_cost[tree_idx]
@@ -209,32 +214,23 @@ class SliceCalculator:
         self.optimal_slice = {}
 
 
-leaves = [Leaf(2) for _ in range(6)]
-D = Branch(leaves[0], leaves[1], factor=0.25, cost=1)
-E = Branch(leaves[2], leaves[3], factor=0.25, cost=5)
-C = Branch(leaves[4], leaves[5], factor=0.25, cost=10)
-B = Branch(D, E, factor=0.25, cost=10)
-A = Branch(B, C, factor=0.25, cost=1)
 
 
-def complete_tree(depth):
+def complete_tree(depth: int):
     if depth > 0:
         return Branch(complete_tree(depth - 1), complete_tree(depth - 1), factor=0.5, cost=1)
     return Leaf(1)
 
-T = complete_tree(6)
-
-def compute_N_slices(T: Tree, N: int) -> Tuple[List[Set[int]], float]:
-    calc = SliceCalculator(T)
+def compute_N_slices(calc: SliceCalculator, N: int) -> Tuple[List[Set[int]], float]:
     calc.enumerate_children()
 
     for _ in range(N):
-        calc.compute_slice(T.tag)
+        calc.compute_slice(calc.tree.tag)
         calc.update_costs()
 
-    overall_cost = calc.total_cost[T.tag]
+    overall_cost = calc.total_cost[calc.tree.tag]
 
-    slices = [{T.tag}]
+    slices = [{calc.tree.tag}]
     for _ in range(N):
         calc.pop()
         new_slice = set()
@@ -255,7 +251,34 @@ def expected_cost(t: Tree) -> float:
         return t.cost
     return t.p_left * expected_cost(t.left) + t.p_right * expected_cost(t.right) + t.cost
 
-for i in range(4):
-    print(compute_N_slices(A, i))
 
-print(expected_cost(A))
+def entropy(T: Tree, slc: Set[int]) -> float:
+    calc = SliceCalculator(T)
+    calc.enumerate_children()
+
+    total = 0.
+    for vertex in slc:
+        total -= calc.prob[vertex] * log2(calc.prob[vertex])
+
+    return total
+
+
+# for i in range(4):
+#     print(compute_N_slices(SliceCalculator(A), i))
+if __name__ == '__main__':
+    T = complete_tree(6)
+    
+    leaves = [Leaf(2) for _ in range(6)]
+    D = Branch(leaves[0], leaves[1], factor=0.25, cost=1)
+    E = Branch(leaves[2], leaves[3], factor=0.25, cost=5)
+    C = Branch(leaves[4], leaves[5], factor=0.25, cost=10)
+    B = Branch(D, E, factor=0.25, cost=10)
+    A = Branch(B, C, factor=0.25, cost=1)
+
+    for i in range(3):
+        print(f'{i + 1} slices')
+        slices, cost = compute_N_slices(SliceCalculator(A), i + 1)
+        print(f'Entropy slice: {slices[-1]}')
+        print(f'Entropy = {entropy(A, slices[-1])} bits')
+
+# print(expected_cost(A))
