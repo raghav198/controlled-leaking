@@ -15,11 +15,14 @@ cond = pp.Literal('if') + '(' + num_expr + '<' + num_expr + ')' + '{' + num_expr
 func_def <<= pp.Literal('\\') + '(' + pp.Group(pp.delimited_list(var, ',')) + ')' + '=>' + '{' + num_expr + '}'
 
 func_call = var + '(' + pp.Group(pp.delimited_list(num_expr, ',')) + ')'
-index_expr = (pp.Suppress('@') + num_expr + '[' + single_num_expr + ']').add_parse_action(lambda n: pita.PitaIndexExpr(n[0], n[2]))
+index_expr = (pp.Suppress('@') + num_expr + '[' + single_num_expr + ']')
 
 single_num_expr <<= cond | let | arith | func_call | var | index_expr | literal_num
 num_expr <<= single_num_expr | (pp.Suppress('[') + pp.Group(pp.delimited_list(single_num_expr, ';')) + pp.Suppress(']')).set_parse_action(lambda n: pita.PitaArrayExpr(list(n[0])))
 expr <<= func_def | num_expr
+
+def IndexAction(n):
+    return pita.PitaIndexExpr(n[0], n[3])
 
 def VarAction(n):
     return pita.PitaVarExpr(n[0])
@@ -40,6 +43,7 @@ def FuncCallAction(n):
     return pita.PitaFuncCallExpr(n[0].name, list(n[2]))
 
 var.set_parse_action(VarAction)
+index_expr.set_parse_action(IndexAction)
 literal_num.set_parse_action(VarAction)
 let.set_parse_action(LetAction)
 arith.set_parse_action(ArithAction)
