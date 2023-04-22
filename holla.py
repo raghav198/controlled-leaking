@@ -2,8 +2,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import reduce
 from typing import Callable
+from typecheck import is_ptxt
 
-from pita import PitaArithExpr, PitaArrayExpr, PitaCondExpr, PitaExpr, PitaFuncCallExpr, PitaFuncDefExpr, PitaIndexExpr, PitaLetExpr, PitaNumExpr, PitaVarExpr, gcd, pita_map, pita_num_map
+from pita import PitaArithExpr, PitaArrayExpr, PitaCondExpr, PitaExpr, PitaFuncCallExpr, PitaFuncDefExpr, PitaIndexExpr, PitaLetExpr, PitaNumExpr, PitaSingleNumExpr, PitaVarExpr, gcd, pita_map, pita_num_map
 
 @dataclass
 class ChallahVar:
@@ -105,33 +106,59 @@ def concatenate_trees(left: ChallahTree, right: ChallahTree):
     return operad_compose(left, right, concat)
 
 
+def stage_conditional(expr: PitaNumExpr):
+    match expr:
+        case PitaCondExpr(left, right, true, false):
+            try:
+                left_val = evaluate_single_plaintext(left)
+                right_val = evaluate_single_plaintext(right)
+            except:
+                return PitaCondExpr(left, right, stage_conditional(true), stage_conditional(false))
+            if left_val < right_val:
+                return stage_conditional(true)
+            return stage_conditional(false)
+        case _:
+            return pita_num_map(expr, stage_conditional)
+
+
+def evaluate_single_plaintext(expr: PitaSingleNumExpr) -> int:
+    # this shoul be plaintext, beta reduction and subsitution should already be performed
+    match expr:
+        case PitaVarExpr(name):
+            if name.isnumeric():
+                return int(name)
+            raise Exception(f'Unsubstituted variable `{name}`!')
+        case PitaArithExpr(left, op, right):
+            assert isinstance(left, PitaSingleNumExpr)
+            assert isinstance(right, PitaSingleNumExpr)
+            left_val = evaluate_single_plaintext(left)
+            right_val = evaluate_single_plaintext(right)
+            
+            if op == '+':
+                return left_val + right_val
+            if op == '-':
+                return left_val - right_val
+            if op == '*':
+                return left_val * right_val
+            raise Exception(f'Unrecognized op `{op}`!')
+        case PitaCondExpr(left, right, true, false):
+            assert isinstance(true, PitaSingleNumExpr)
+            assert isinstance(false, PitaSingleNumExpr)
+            if evaluate_single_plaintext(left) < evaluate_single_plaintext(right):
+                return evaluate_single_plaintext(true)
+            return evaluate_single_plaintext(false)
+        case _:
+            raise TypeError(f'Found unexpected form `{expr}` when evaluating plaintext! (Maybe you forgot to do beta reduction?)')
+                    
 def desugar_indices(expr: PitaExpr):
     match expr:
         case PitaIndexExpr(arr, index):
-            return desugar_indices(arr.elems[index])
+            index = desugar_indices(index) # evaluate nested indices (e.g. a[b[i]])
+            assert isinstance(index, PitaSingleNumExpr) # to satisfy the typechecker?
+            return desugar_indices(arr.elems[evaluate_single_plaintext(index)])
         case _:
             return pita_map(expr, desugar_indices)
 
-
-# does not work for inlining function calls!
-# call this from the inside out!
-# def substitute(var: str, val: PitaNumExpr, body: PitaNumExpr) -> PitaNumExpr:
-#     match body:
-#         case PitaVarExpr(name):
-#             if name == var:
-#                 return val
-#             return body
-#         case PitaArithExpr(left, op, right):
-#             return PitaArithExpr(substitute(var, val, left), op, substitute(var, val, right))
-#         case PitaLetExpr(var2, val2, body2):
-#             return PitaLetExpr(var2, val2, substitute(var, val, body2))
-#         case PitaCondExpr(left, right, true, false):
-#             return PitaCondExpr(substitute(var, val, left), substitute(var, val, right), substitute(var, val, true), substitute(var, val, false))
-#         case PitaFuncCallExpr(name, params):
-#             return PitaFuncCallExpr(name, [substitute(var, val, param) for param in params])
-#         case PitaArrayExpr(elems):
-#             return PitaArrayExpr([substitute(var, val, elem) for elem in elems])
-#     raise TypeError(type(body))
 
 def substitute(var: str, val: PitaNumExpr, body: PitaNumExpr) -> PitaNumExpr:
     match body:
@@ -142,59 +169,21 @@ def substitute(var: str, val: PitaNumExpr, body: PitaNumExpr) -> PitaNumExpr:
         case _:
             return pita_num_map(body, lambda e: substitute(var, val, e))
 
-# call this from the inside out!
-# def inline(func: str, args: list[str], body: PitaNumExpr, prog: PitaNumExpr):
-#     match prog:
-#         case PitaVarExpr(name):
-#             return PitaVarExpr(name)
-#         case PitaArithExpr(left, op, right):
-#             return PitaArithExpr(inline(func, args, body, left), op, inline(func, args, body, right))
-#         case PitaLetExpr(var, val, body2):
-#             assert isinstance(val, PitaNumExpr), f'Cannot inline inside function definition {var}!'
-#             return PitaLetExpr(var, inline(func, args, body, val), inline(func, args, body, body2))
-            
-#         case PitaCondExpr(left, right, true, false):
-#             return PitaCondExpr(inline(func, args, body, left), inline(func, args, body, right), inline(func, args, body, true), inline(func, args, body, false))
-#         case PitaFuncCallExpr(name, params):
-#             if name == func:
-#                 evaluated_body = body
-#                 for arg, param in zip(args, params):
-#                     evaluated_body = substitute(arg, param, evaluated_body)
-#                 return evaluated_body
-#             return PitaFuncCallExpr(name, params)
-#     raise TypeError(type(prog))
+
 def inline(func: str, args: list[str], body: PitaNumExpr, prog: PitaNumExpr):
     match prog:
         case PitaFuncCallExpr(name, params):
+            params = [inline(func, args, body, param) for param in params]
             if name == func:
                 evaluated_body = body
                 for arg, param in zip(args, params):
                     evaluated_body = substitute(arg, param, evaluated_body)
+                evaluated_body = stage_conditional(evaluated_body)
                 return inline(func, args, body, evaluated_body)
             return PitaFuncCallExpr(name, params)
         case _:
             return pita_map(prog, lambda e: inline(func, args, body, e)) # type: ignore
 
-
-# def inline_all(expr: PitaExpr):
-#     match expr:
-#         case PitaVarExpr(name):
-#             return PitaVarExpr(name)
-#         case PitaArithExpr(left, op, right):
-#             return PitaArithExpr(inline_all(left), op, inline_all(right))
-#         case PitaLetExpr(var, val, body):
-#             match val:
-#                 case PitaFuncDefExpr(args, func_body):
-#                     return inline(var, args, func_body, inline_all(body))
-#                 case _:
-#                     return PitaLetExpr(var, inline_all(val), inline_all(body))
-#         case PitaCondExpr(left, right, true, false):
-#             return PitaCondExpr(inline_all(left), inline_all(right), inline_all(true), inline_all(false))
-#         case PitaFuncCallExpr(name, params):
-#             return PitaFuncCallExpr(name, [inline_all(param) for param in params])
-#         case PitaArrayExpr(elems):
-#             return PitaArrayExpr([inline_all(elem) for elem in elems])
-#     raise TypeError(type(expr))
 
 def inline_all(expr: PitaExpr):
     match expr:
@@ -202,32 +191,12 @@ def inline_all(expr: PitaExpr):
             match val:
                 case PitaFuncDefExpr(args, func_body):
                     inlined_body = inline_all(body)
-                    print('original body:')
-                    print(body)
-                    print('inlined body:')
-                    print(inlined_body)
                     post_inlining = inline(var, args, func_body, inlined_body)
-                    print('post inlining:')
-                    print(post_inlining)
                     return post_inlining
                 case _:
                     return PitaLetExpr(var, inline_all(val), inline_all(body))
         case _:
             return pita_map(expr, inline_all)
-
-# expects all function definitions and calls to be inlined
-# def substitute_all(expr: PitaExpr):
-#     match expr:
-#         case PitaVarExpr(name):
-#             return PitaVarExpr(name)
-#         case PitaArithExpr(left, op, right):
-#             return PitaArithExpr(substitute_all(left), op, substitute_all(right))
-#         case PitaLetExpr(var, val, body):
-#             assert isinstance(val, PitaNumExpr), f'Function definition {var} not inlined before substitution!'
-#             return substitute(var, val, substitute_all(body))
-#         case PitaCondExpr(left, right, true, false):
-#             return PitaCondExpr(substitute_all(left), substitute_all(right), substitute_all(true), substitute_all(false))
-#     raise TypeError(type(expr))
 
 def substitute_all(expr: PitaExpr):
     match expr:
@@ -267,25 +236,45 @@ def treeify_expr(expr: PitaExpr):
     raise TypeError(type(expr))
 
 
-passes = [inline_all, substitute_all, desugar_indices, treeify_expr, comparison_folding, lambda t: t.normalize()]
+def check_plaintext(expr: PitaExpr, symbols=None):
+    if symbols is None:
+        symbols = {}
+        is_ptxt(expr, symbols)
+    
+    # now, verify that all array index expressions are plaintext
+    match expr:
+        case PitaVarExpr(_):
+            pass
+        case PitaArithExpr(left, _, right):
+            check_plaintext(left, symbols)
+            check_plaintext(right, symbols)
+        case PitaFuncDefExpr(_, body):
+            check_plaintext(body, symbols)
+        case PitaLetExpr(_, val, body):
+            check_plaintext(val, symbols)
+            check_plaintext(body, symbols)
+        case PitaCondExpr(left, right, true, false):
+            check_plaintext(left, symbols)
+            check_plaintext(right, symbols)
+            check_plaintext(true, symbols)
+            check_plaintext(false, symbols)
+        case PitaIndexExpr(arr, index):
+            check_plaintext(arr, symbols)
+            assert is_ptxt(index, symbols), f'{index} not plaintext!'
+        case PitaFuncCallExpr(_, params):
+            for param in params:
+                check_plaintext(param, symbols)
+        case PitaArrayExpr(elems):
+            for elem in elems:
+                check_plaintext(elem, symbols)
+        case _:
+            raise TypeError(type(expr))
+    return expr
+
+
+passes = [inline_all, substitute_all, check_plaintext, desugar_indices, stage_conditional, treeify_expr, comparison_folding, lambda t: t.normalize()]
 
 def compile(prog) -> ChallahTree:
-    print(prog)
-    input()
     for p in passes:
         prog = p(prog)
-        print(prog)
-        input()
     return prog
-
-if __name__ == '__main__':
-    prog = gcd(PitaVarExpr('a'), PitaVarExpr('b'), 8)
-    print(prog)
-    print('-' * 10)
-    from time import time
-    for p in passes:
-        print(f'Running pass `{str(p.__name__)}`...')
-        s = time()
-        prog = p(prog)
-        print(f'({int(1000*(time() - s))} ms)')
-    print(prog)
