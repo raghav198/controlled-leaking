@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from functools import reduce
-from typing import Callable
+from typing import Callable, cast
 from typecheck import is_ptxt
 
 from pita import PitaArithExpr, PitaArrayExpr, PitaCondExpr, PitaExpr, PitaFuncCallExpr, PitaFuncDefExpr, PitaIndexExpr, PitaLetExpr, PitaNumExpr, PitaSingleNumExpr, PitaVarExpr, gcd, pita_map, pita_num_map
@@ -50,17 +50,18 @@ class ChallahArray:
 @dataclass
 class ChallahBranch:
     left: ChallahLeaf
+    lt: bool
     right: ChallahLeaf
     true: ChallahTree
     false: ChallahTree
     
     def __repr__(self):
-        return f'if ({self.left} < {self.right}) {{\n{self.true}\n}} else {{\n{self.false}\n}}'
+        return f'if ({self.left} {"<" if self.lt else "=="} {self.right}) {{\n{self.true}\n}} else {{\n{self.false}\n}}'
     
     def normalize(self):
         true = [t.normalize() for t in self.true] if isinstance(self.true, list) else self.true.normalize()
         false = [t.normalize() for t in self.false] if isinstance(self.false, list) else self.false.normalize()
-        return ChallahBranch(self.left, self.right, true, false)
+        return ChallahBranch(self.left, self.lt, self.right, true, false)
 
 ChallahLeaf = ChallahVar | ChallahArithExpr | ChallahArray
 ChallahTree = ChallahLeaf | list[ChallahLeaf] | ChallahBranch
@@ -77,9 +78,9 @@ def operad_compose(left: ChallahTree, right: ChallahTree, f: Callable[[ChallahLe
     if isinstance(left, ChallahLeaf) and isinstance(right, ChallahLeaf):
         return f(left, right)
     if isinstance(left, ChallahBranch):
-        return ChallahBranch(left.left, left.right, operad_compose(left.true, right, f), operad_compose(left.false, right, f))
+        return ChallahBranch(left.left, left.lt, left.right, operad_compose(left.true, right, f), operad_compose(left.false, right, f))
     if isinstance(right, ChallahBranch):
-        return ChallahBranch(right.left, right.right, operad_compose(left, right.true, f), operad_compose(left, right.false, f))
+        return ChallahBranch(right.left, right.lt, right.right, operad_compose(left, right.true, f), operad_compose(left, right.false, f))
     raise TypeError(type(left), type(right))
 
 
@@ -87,8 +88,8 @@ def combine_trees(left: ChallahTree, op: str, right: ChallahTree):
     return operad_compose(left, right, lambda l, r: ChallahArithExpr(l, op, r))
 
 
-def compare_trees(left: ChallahTree, right: ChallahTree, true: ChallahTree, false: ChallahTree):
-    return operad_compose(left, right, lambda l, r: ChallahBranch(l, r, true, false))
+def compare_trees(left: ChallahTree, lt: bool, right: ChallahTree, true: ChallahTree, false: ChallahTree):
+    return operad_compose(left, right, lambda l, r: ChallahBranch(l, lt, r, true, false))
 
 
 def concat(left: ChallahLeaf, right: ChallahLeaf) -> ChallahArray:
@@ -108,12 +109,12 @@ def concatenate_trees(left: ChallahTree, right: ChallahTree):
 
 def stage_conditional(expr: PitaNumExpr):
     match expr:
-        case PitaCondExpr(left, right, true, false):
+        case PitaCondExpr(left, op, right, true, false):
             try:
                 left_val = evaluate_single_plaintext(left)
                 right_val = evaluate_single_plaintext(right)
             except:
-                return PitaCondExpr(left, right, stage_conditional(true), stage_conditional(false))
+                return PitaCondExpr(left, op, right, stage_conditional(true), stage_conditional(false))
             if left_val < right_val:
                 return stage_conditional(true)
             return stage_conditional(false)
@@ -141,10 +142,10 @@ def evaluate_single_plaintext(expr: PitaSingleNumExpr) -> int:
             if op == '*':
                 return left_val * right_val
             raise Exception(f'Unrecognized op `{op}`!')
-        case PitaCondExpr(left, right, true, false):
+        case PitaCondExpr(left, op, right, true, false):
             assert isinstance(true, PitaSingleNumExpr)
             assert isinstance(false, PitaSingleNumExpr)
-            if evaluate_single_plaintext(left) < evaluate_single_plaintext(right):
+            if (op and evaluate_single_plaintext(left) < evaluate_single_plaintext(right)) or (not op and evaluate_single_plaintext(left) == evaluate_single_plaintext(right)):
                 return evaluate_single_plaintext(true)
             return evaluate_single_plaintext(false)
         case _:
@@ -176,14 +177,32 @@ def inline(func: str, args: list[str], body: PitaNumExpr, prog: PitaNumExpr):
             params = [inline(func, args, body, param) for param in params]
             if name == func:
                 evaluated_body = body
-                for arg, param in zip(args, params):
-                    evaluated_body = substitute(arg, param, evaluated_body)
-                evaluated_body = stage_conditional(evaluated_body)
+                for i, arg in enumerate(args):
+                    evaluated_body = substitute(arg, PitaVarExpr(f'{func}#{i}'), evaluated_body)
+                for i, param in enumerate(params):
+                    evaluated_body = substitute(f'{func}#{i}', param, evaluated_body)
+                # for arg, param in zip(args, params):
+                #     evaluated_body = substitute(arg, param, evaluated_body)
+
+                # for p in interpret_passes:
+                #     evaluated_body = p(evaluated_body)
+                
                 return inline(func, args, body, evaluated_body)
             return PitaFuncCallExpr(name, params)
         case _:
             return pita_map(prog, lambda e: inline(func, args, body, e)) # type: ignore
 
+
+def beta_reduce(args: list[str], body: PitaNumExpr, params: list[PitaNumExpr], ctx_vars: dict[str, PitaNumExpr], ctx_funcs: dict[str, PitaFuncDefExpr]):
+    subst_vars: dict[str, PitaNumExpr] = ctx_vars.copy()
+    # print(ctx_vars)
+    # print(args)
+    # print(params)
+    for arg, param in zip(args, params):
+        subst_vars[arg] = param
+    # print(subst_vars)
+    # input()
+    return interpret(body, subst_vars, ctx_funcs)
 
 def inline_all(expr: PitaExpr):
     match expr:
@@ -208,12 +227,12 @@ def substitute_all(expr: PitaExpr):
 
 def comparison_folding(tree: ChallahTree, known: list[tuple[ChallahLeaf, ChallahLeaf]] = []):
     match tree:
-        case ChallahBranch(left, right, true, false):
+        case ChallahBranch(left, lt, right, true, false):
             if (left, right) in known:
                 return comparison_folding(true, known)
             if (right, left) in known:
                 return comparison_folding(false, known)
-            return ChallahBranch(left, right, comparison_folding(true, known + [(left, right)]), comparison_folding(false, known + [(right, left)]))
+            return ChallahBranch(left, lt, right, comparison_folding(true, known + [(left, right)]), comparison_folding(false, known + [(right, left)]))
         case _:
             return tree
 
@@ -228,8 +247,8 @@ def treeify_expr(expr: PitaExpr):
             
             return comparison_folding(combine_trees(ltree, op, rtree))
             
-        case PitaCondExpr(left, right, true, false):
-            return comparison_folding(compare_trees(treeify_expr(left), treeify_expr(right), treeify_expr(true), treeify_expr(false)))
+        case PitaCondExpr(left, lt, right, true, false):
+            return comparison_folding(compare_trees(treeify_expr(left), lt, treeify_expr(right), treeify_expr(true), treeify_expr(false)))
         case PitaArrayExpr(elems):
             tree_elems = [treeify_expr(elem) for elem in elems]
             return comparison_folding(reduce(concatenate_trees, tree_elems[1:], tree_elems[0]))
@@ -253,7 +272,7 @@ def check_plaintext(expr: PitaExpr, symbols=None):
         case PitaLetExpr(_, val, body):
             check_plaintext(val, symbols)
             check_plaintext(body, symbols)
-        case PitaCondExpr(left, right, true, false):
+        case PitaCondExpr(left, lt, right, true, false):
             check_plaintext(left, symbols)
             check_plaintext(right, symbols)
             check_plaintext(true, symbols)
@@ -271,10 +290,90 @@ def check_plaintext(expr: PitaExpr, symbols=None):
             raise TypeError(type(expr))
     return expr
 
+def evaluate(prog: PitaNumExpr):
+    try:
+        match prog:
+            case PitaArrayExpr(elems):
+                return PitaArrayExpr([cast(PitaSingleNumExpr, PitaVarExpr(str(evaluate_single_plaintext(elem)))) for elem in elems])
+            case _:
+                return PitaVarExpr(str(evaluate_single_plaintext(prog)))
+    except:
+        return prog
 
-passes = [inline_all, substitute_all, check_plaintext, desugar_indices, stage_conditional, treeify_expr, comparison_folding, lambda t: t.normalize()]
+ops = {'+': lambda a, b: a + b, '-': lambda a, b: a - b, '*': lambda a, b: a * b}
+
+def interpret(expr: PitaExpr, ctx_vars: dict[str, PitaNumExpr]={}, ctx_funcs: dict[str, PitaFuncDefExpr]={}) -> PitaNumExpr:
+    available = lambda e: isinstance(e, PitaVarExpr) and e.name.isnumeric()
+    get = lambda e: int(e.name)
+    match expr:
+        case PitaVarExpr(name):
+            if name in ctx_vars:
+                # print(f'Looking up {name} = {ctx_vars[name]}')
+                return interpret(ctx_vars[name], ctx_vars, ctx_funcs)
+            if not name.isnumeric() and not name.startswith('input#'):
+                raise Exception(f'Undefined variable: `{name}`')
+            return expr
+        case PitaArithExpr(left, op, right):
+            left_val = interpret(left, ctx_vars, ctx_funcs)
+            right_val = interpret(right, ctx_vars, ctx_funcs)
+            if available(left_val) and available(right_val):
+                return PitaVarExpr(str(ops[op](get(left_val), get(right_val))))
+            return PitaArithExpr(left_val, op, right_val)
+        case PitaLetExpr(var, val, body):
+            if isinstance(val, PitaNumExpr):
+                ctx_vars[var] = val
+                return interpret(body, ctx_vars, ctx_funcs)
+            ctx_funcs[var] = val
+            return interpret(body, ctx_vars, ctx_funcs)
+        case PitaCondExpr(left, lt, right, true, false):
+            # print(f'condition {left} {"<" if lt else "=="} {right}')
+            left_val = interpret(left, ctx_vars, ctx_funcs)
+            right_val = interpret(right, ctx_vars, ctx_funcs)
+            # print(f'new condition {left_val} {"<" if lt else "=="} {right_val}')
+            assert isinstance(left_val, PitaSingleNumExpr)
+            assert isinstance(right_val, PitaSingleNumExpr)
+            if available(left_val) and available(right_val):
+                # print('...inlining...')
+                if (lt and get(left_val) < get(right_val)) or (not lt and get(left_val) == get(right_val)):
+                    return interpret(true, ctx_vars, ctx_funcs)
+                return interpret(false, ctx_vars, ctx_funcs)
+            return PitaCondExpr(left_val, lt, right_val, interpret(true, ctx_vars, ctx_funcs), interpret(false, ctx_vars, ctx_funcs))
+        case PitaIndexExpr(arr, index):
+            # print(f'index {arr}[{index}] ({ctx_vars})')
+            arr_val = interpret(arr, ctx_vars, ctx_funcs)
+            index_val = interpret(index, ctx_vars, ctx_funcs)
+            assert isinstance(arr_val, PitaArrayExpr), arr_val
+            assert available(index_val), index_val
+            return arr_val.elems[get(index_val)]
+        case PitaFuncCallExpr(name, params):
+            assert name in ctx_funcs
+            func = ctx_funcs[name]
+            # print(f'old params: {params}')
+            params = [interpret(param, ctx_vars, ctx_funcs) for param in params]
+            # print(f'interpreted params: {params}')
+            return beta_reduce(func.args, func.body, params, ctx_vars, ctx_funcs)
+        case PitaArrayExpr(elems):
+            # doing this for mypy
+            new_elems: list[PitaSingleNumExpr] = []
+            for elem in elems:
+                new_elem = interpret(elem, ctx_vars, ctx_funcs)
+                assert isinstance(new_elem, PitaSingleNumExpr)
+                new_elems.append(new_elem)
+            return PitaArrayExpr(new_elems)
+    raise TypeError(type(expr))
+            
+            
+        
+
+
+# interpret_passes = [inline_all, substitute_all, check_plaintext, desugar_indices, stage_conditional]
+passes = [interpret, treeify_expr, comparison_folding, lambda t: t.normalize()]
 
 def compile(prog) -> ChallahTree:
+    # print(prog)
     for p in passes:
         prog = p(prog)
+        # print(p.__name__)
+        # print(prog)
+        # input()
     return prog

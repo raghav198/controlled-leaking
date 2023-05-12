@@ -96,17 +96,17 @@ def compile_array_circuits(circuits: list[list[coyote_ast.Expression]]):
     lanes = []
     sched = []
     code = vectorize(comp, extra_force_lanes=force_lanes, lanes_out=lanes, sched_out=sched)
-    print('\n'.join(map(str, code)))
+    # print('\n'.join(map(str, code)))
     rets: list[int] = []
     widths = []
     
     max_reg = max(sched)
-    print(force_lanes)
-    print(lanes)
-    print(sched)
+    # print(force_lanes)
+    # print(lanes)
+    # print(sched)
     for idx in array_idx_outputs:
         outputs, liveness, width = analyzeV2(lanes, sched, set(array_idx_outputs[idx]))
-        print(idx, liveness)
+        # print(idx, liveness)
         widths.append(width)
         mask = lambda s: [int(i in s) for i in range(width)]
         # ret = next(iter(outputs))
@@ -116,7 +116,7 @@ def compile_array_circuits(circuits: list[list[coyote_ast.Expression]]):
             code.append(VecLoadInstr(f'__v{max_reg + 1}', f'__v{next(iter(outputs))}'))
         rets.append(max_reg + 1)
         max_reg += 1
-    print('\n'.join(map(str, code)))
+    # print('\n'.join(map(str, code)))
     return code, rets, len(circuits)
 
 def vectorize_decisions(tree: ChallahTree):
@@ -139,7 +139,7 @@ def vectorize_labels(tree: ChallahTree):
     #     label_circuits += list(slice)
     
     code, vecs, width = compile_array_circuits(label_circuits)
-    print('\n'.join(map(str, code)))
+    # print('\n'.join(map(str, code)))
     return generate_coyote_cpp(code, f'COILLabels', width, [f'__v{vec}' for vec in vecs])
     
     
