@@ -46,7 +46,6 @@ int main(int argc, char * argv[])
 {
 
     EncInfo info(4095, 2, 1, 500, 2);
-    std::cout << "Setting up parameters...\n";
 
     std::unordered_map<std::string, int> inputs = {{"x0", 4}, {"x1", 2}, {"x2", 5}, {"a0", 12}, {"b0", 18}};
     ctxt_bit scratch = encrypt_vector(info, std::vector<long>());
@@ -68,21 +67,31 @@ int main(int argc, char * argv[])
         helib::CtPtrs_vectorCt(left_kernel.output_wires[0]), 
         helib::CtPtrs_vectorCt(right_kernel.output_wires[0]), true);
 
+    ctxt_bit eq = decisions;
+    eq += op;
+    eq += NTL::ZZ(1);
+
+#ifdef DEBUG
     for (auto i : left_kernel.get_output(0))
         std::cout << i << " ";
     std::cout << "\n";
 
-    std::cout << "<\n";
+    std::cout << "<=>\n";
 
     for (auto i : right_kernel.get_output(0))
         std::cout << i << " ";
     std::cout << "\n";
 
-    std::cout << "=\n";
+    std::cout << "---\n";
 
     for (auto i : slice(decrypt_vector(info, decisions), 0, left_kernel.width))
         std::cout << i << " ";
     std::cout << "\n";
+
+    for (auto i : slice(decrypt_vector(info, eq), 0, left_kernel.width))
+        std::cout << i << " ";
+    std::cout << "\n";
+#endif
 
     int num_levels = model->level_b2s.size();
     std::vector<ctxt_bit> masks(num_levels, decisions);
@@ -92,6 +101,7 @@ int main(int argc, char * argv[])
         auto b2s = model->level_b2s[i];
         auto mask = model->level_mask[i];
 
+#ifdef DEBUG
         std::cout << "Current level matrix:\n";
         for (auto diag : b2s) {
             for (auto bit : slice(decrypt_vector(info, diag), 0, left_kernel.width + 1)) 
@@ -105,16 +115,20 @@ int main(int argc, char * argv[])
                 std::cout << bit << " ";
             std::cout << "\n";
         }
-
+#endif
         auto slots = mat_mul(b2s, branch_rots);
+
+#ifdef DEBUG
         std::cout << "matmul result: ";
         for (auto bit : slice(decrypt_vector(info, slots), 0, left_kernel.width + 1)) 
             std::cout << bit << " ";
         std::cout << "\n";
+#endif
         slots += mask;
         masks[i] = slots;
     }
 
+#ifdef DEBUG
     std::cout << "Resulting masks:\n";
     for (auto mask : masks) {
         std::cout << "* ";
@@ -123,6 +137,7 @@ int main(int argc, char * argv[])
         }
         std::cout << "\n";
     }
+#endif
 
     auto inference = my_reduce(
         masks,
@@ -132,17 +147,19 @@ int main(int argc, char * argv[])
         },
         0, masks.size());
 
+#ifdef DEBUG
     std::cout << "inference:\n";
     for (auto bit : decrypt_vector(info, inference)) {
         std::cout << bit << " ";
     }
     std::cout << "\n";
-
+#endif
 
     COILLabels label_kernel(info);
     label_kernel.Prepare(inputs);
     label_kernel.Compute();
 
+#ifdef DEBUG
     std::cout << "Decrypting results...\n";
     
     std::cout << "Computed labels:\n";
@@ -152,6 +169,7 @@ int main(int argc, char * argv[])
         }
         std::cout << "\n";
     }
+#endif
 
     std::vector<ctxt> answer_enc_array;
     for (auto output : label_kernel.output_wires) {
