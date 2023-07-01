@@ -1,9 +1,23 @@
-#pragma once
+#ifndef KERNEL_HPP
+#define KERNEL_HPP
 
 #include "coyote-runtime.hpp"
 
 #include <vector>
 #include <string>
+#include <copse/model-owner.hpp>
+
+enum class kernel {
+    left,
+    right,
+    label
+};
+
+struct client_data {
+    std::unordered_map<kernel, std::vector<ctxt>> input_wires;
+    std::unordered_map<std::string, helib::Ptxt<helib::BGV>> masks;
+    CtxtModelDescription model;
+};
 
 struct CoyoteKernel {
     EncInfo& info;
@@ -19,11 +33,7 @@ struct CoyoteKernel {
 
     void add_masks(std::initializer_list<std::string> mask_list) {
         for (auto mask : mask_list) {
-            std::vector<long> mask_data;
-            for (auto c : mask) {
-                mask_data.push_back(c - '0');
-            }
-            masks[mask] = zzx_vec(info.context, mask_data);
+            masks[mask] = make_mask(info, mask);
         }
     }
 
@@ -35,3 +45,31 @@ struct CoyoteKernel {
     }
 };
 
+struct COILLabels : public CoyoteKernel {
+    COILLabels(EncInfo& info);
+    virtual void Prepare(std::unordered_map<std::string, int>) override;
+    virtual void Compute() override;
+};
+
+struct COILLeftKernel : public CoyoteKernel {
+    COILLeftKernel(EncInfo& info);
+    virtual void Prepare(std::unordered_map<std::string, int>) override;
+    virtual void Compute() override;
+};
+
+struct COILRightKernel : public CoyoteKernel {
+    COILRightKernel(EncInfo& info);
+    virtual void Prepare(std::unordered_map<std::string, int>) override;
+    virtual void Compute() override;
+};
+
+class COILMaurice : public ModelOwner {
+public:
+    std::string eq_mask();
+    std::string lt_mask();
+    COILMaurice(EncInfo& info) : ModelOwner(info) {}
+    virtual PtxtModelDescription plaintext_model();
+    virtual CtxtModelDescription* GenerateModel();
+};
+
+#endif

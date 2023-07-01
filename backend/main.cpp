@@ -1,17 +1,22 @@
 #include <array>
+#include <chrono>
 #include <helib/FHE.h>
 #include <helib/binaryArith.h>
 #include <helib/binaryCompare.h>
+#include <helib/intraSlot.h>
 #include <iostream>
 #include <vector>
 #include <copse/vectrees.hpp>
 #include <copse/sally-server.hpp>
 
-#include "gcd.coil/gcd.hpp"
+#include "kernel.hpp"
+#include "inputs.hpp"
 
-int extract(EncInfo& info, ctxt wire) {
+int extract(EncInfo& info, ctxt wire, int limit) {
     auto answer = decrypt(info, wire);
+    int pos = 0;
     for (auto i : answer) {
+        if (pos++ == limit) return 0;
         if (i != 0) {
             return i;
         }
@@ -42,41 +47,100 @@ std::vector<T> slice(std::vector<T> input, int start, int len) {
     return std::vector<T>(input.begin() + start, input.begin() + start + len);
 }
 
+#ifdef PTXT_MODEL
+#define debug_vector decode_vector
+#else
+#define debug_vector decrypt_vector
+#endif
+
+
+
 int main(int argc, char * argv[])
 {
+    
+    std::cout << "Setting up encryption..." << std::flush;
+    
+    EncInfo info(8191, 2, 1, 500, 2);
 
-    EncInfo info(4095, 2, 1, 500, 2);
+    std::cout << info.nslots << "slots\n";
+ 
+#ifdef VECTREE_THREADED
+    NTL::SetNumThreads(32);
+#endif
 
-    std::unordered_map<std::string, int> inputs = {{"x0", 4}, {"x1", 2}, {"x2", 5}, {"a0", 12}, {"b0", 18}};
+    input_handler inp;
+    // inp.add_arr({2, 10, 11, 6, 8, 9, 4}); // the list
+    // inp.add_num(7); // threshold below which stuff gets zeroed out
+
+    inp.add_arr({2, 4, 3, 1, 5, 6, 8, 6, 7, 9});
+    inp.add_num(3);
+    inp.add_num(4);
+
     ctxt_bit scratch = encrypt_vector(info, std::vector<long>());
 
+    std::cout << "Encrypting model...\n";
     COILMaurice maurice(info);
-    auto model = maurice.GenerateModel();
+    CtxtModelDescription * model = maurice.GenerateModel();
 
+    std::cout << "Encrypting inputs...\n";
     COILLeftKernel left_kernel(info);
-    left_kernel.Prepare(inputs);
-    left_kernel.Compute();
+    left_kernel.Prepare(inp.inputs);
+    
 
     COILRightKernel right_kernel(info);
-    right_kernel.Prepare(inputs);
-    right_kernel.Compute();
+    right_kernel.Prepare(inp.inputs);
+    
 
-    ctxt_bit decisions(scratch);
+    COILLabels label_kernel(info);
+    label_kernel.Prepare(inp.inputs);
+    
+    auto start = std::chrono::high_resolution_clock::now();
+
+    std::cout << "Computing inputs...\n";
+    left_kernel.Compute();
+    right_kernel.Compute();
+    label_kernel.Compute();
+
+    auto computed = std::chrono::high_resolution_clock::now();
+
+    if (left_kernel.output_wires.size() == 0) {
+        std::cout << "skipping branches\n";
+        std::cout << "Answer: [ ";
+        for (auto answer_enc : label_kernel.output_wires) {
+            std::cout << extract(info, answer_enc, label_kernel.width) << " ";
+        }
+        std::cout << "]\n";
+
+        return 0;
+    }
+
+    std::cout << "Computing branches...\n";
+    ctxt_bit lt(scratch);
     ctxt_bit op(scratch);
-    helib::compareTwoNumbers(op, decisions, 
+
+    helib::compareTwoNumbers(op, lt, 
         helib::CtPtrs_vectorCt(left_kernel.output_wires[0]), 
         helib::CtPtrs_vectorCt(right_kernel.output_wires[0]), true);
 
-    ctxt_bit eq = decisions;
+    ctxt_bit eq = lt;
     eq += op;
     eq += NTL::ZZ(1);
+
+    auto lt_mask_ptxt = make_mask(info, maurice.lt_mask());
+    auto eq_mask_ptxt = make_mask(info, maurice.eq_mask());
+
+    lt *= lt_mask_ptxt;
+    eq *= eq_mask_ptxt;
+
+    ctxt_bit decisions(lt);
+    decisions += eq;
 
 #ifdef DEBUG
     for (auto i : left_kernel.get_output(0))
         std::cout << i << " ";
     std::cout << "\n";
 
-    std::cout << "<=>\n";
+    std::cout << "vs\n";
 
     for (auto i : right_kernel.get_output(0))
         std::cout << i << " ";
@@ -86,35 +150,34 @@ int main(int argc, char * argv[])
 
     for (auto i : slice(decrypt_vector(info, decisions), 0, left_kernel.width))
         std::cout << i << " ";
-    std::cout << "\n";
-
-    for (auto i : slice(decrypt_vector(info, eq), 0, left_kernel.width))
-        std::cout << i << " ";
-    std::cout << "\n";
+    std::cout << "<=>\n";
 #endif
 
     int num_levels = model->level_b2s.size();
     std::vector<ctxt_bit> masks(num_levels, decisions);
     auto branch_rots = generate_rotations(decisions, model->level_b2s[0].size(), info.context.getEA());
 
+#ifdef DEBUG
+    std::cout << "Branch rotations:\n";
+    for (auto rot : branch_rots) {
+        for (auto bit : slice(decrypt_vector(info, rot), 0, left_kernel.width)) 
+            std::cout << bit << " ";
+        std::cout << "\n";
+    }
+#endif
+
     for (int i = 0; i < num_levels; i++) {
+        std::cout << "Processing level " << i+1 << "/" << num_levels << "\n";
         auto b2s = model->level_b2s[i];
         auto mask = model->level_mask[i];
 
 #ifdef DEBUG
-        std::cout << "Current level matrix:\n";
-        for (auto diag : b2s) {
-            for (auto bit : slice(decrypt_vector(info, diag), 0, left_kernel.width + 1)) 
-                std::cout << bit << " ";
-            std::cout << "\n";
-        }
-
-        std::cout << "Branch rotations:\n";
-        for (auto rot : branch_rots) {
-            for (auto bit : slice(decrypt_vector(info, rot), 0, left_kernel.width)) 
-                std::cout << bit << " ";
-            std::cout << "\n";
-        }
+        // std::cout << "Current level matrix:\n";
+        // for (auto diag : b2s) {
+        //     for (auto bit : slice(debug_vector(info, diag), 0, left_kernel.width + 1)) 
+        //         std::cout << bit << " ";
+        //     std::cout << "\n";
+        // }
 #endif
         auto slots = mat_mul(b2s, branch_rots);
 
@@ -139,6 +202,7 @@ int main(int argc, char * argv[])
     }
 #endif
 
+    std::cout << "Accumulating results...\n";
     auto inference = my_reduce(
         masks,
         [](auto lhs, auto rhs) {
@@ -153,13 +217,7 @@ int main(int argc, char * argv[])
         std::cout << bit << " ";
     }
     std::cout << "\n";
-#endif
 
-    COILLabels label_kernel(info);
-    label_kernel.Prepare(inputs);
-    label_kernel.Compute();
-
-#ifdef DEBUG
     std::cout << "Decrypting results...\n";
     
     std::cout << "Computed labels:\n";
@@ -182,12 +240,17 @@ int main(int argc, char * argv[])
         answer_enc_array.push_back(answer_enc);
     }
     
+    auto end = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
     std::cout << "Answer: [ ";
 
     for (auto answer_enc : answer_enc_array) {
-        std::cout << extract(info, answer_enc) << " ";
+        std::cout << extract(info, answer_enc, label_kernel.width) << " ";
     }
-    std::cout << "]\n";
+    std::cout << "] (" << duration.count() << "ms)\n";
+    std::cout << "Coyote time: " << std::chrono::duration_cast<std::chrono::milliseconds>(computed - start).count() << "ms\n";
 
     return 0;
 
