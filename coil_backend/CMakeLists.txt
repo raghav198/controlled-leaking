@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.0.0)
-project(backend VERSION 0.1.0)
+project(coil_backend VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
-set(PROGRAM "oram_add")
+set(PROGRAM "partial_sums")
 
 file(GLOB COPSE_INCLUDES copse/include/*.hpp)
 file(GLOB COPSE_SOURCES copse/source/*.cpp)

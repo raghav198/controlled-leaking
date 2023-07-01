@@ -11,16 +11,6 @@ from pita_parser import expr
 
 
 def coil_codegen(challah_tree, program_name):
-    includes = """
-#include "kernel-left.hpp"
-#include "kernel-right.hpp"
-#include "kernel-label.hpp"
-#include "model.hpp"
-
-#define eq_mask "{eq}"
-#define lt_mask "{lt}"
-"""
-
     left_code, right_code, lt_mask, eq_mask = vectorize_decisions(challah_tree)
 
     label_code = vectorize_labels(challah_tree)
@@ -29,11 +19,10 @@ def coil_codegen(challah_tree, program_name):
 
     os.makedirs(f'backend/{program_name}.coil/', exist_ok=True)
 
-    open(f'backend/{program_name}.coil/kernel-left.cpp', 'w').write(left_code)
-    open(f'backend/{program_name}.coil/kernel-right.cpp', 'w').write(right_code)
-    open(f'backend/{program_name}.coil/kernel-label.cpp', 'w').write(label_code)
-    open(f'backend/{program_name}.coil/model.cpp', 'w').write(model_code)
-    open(f'backend/{program_name}.coil/{program_name}.hpp', 'w').write(includes.format(eq=eq_mask, lt=lt_mask))
+    open(f'coil_backend/{program_name}.coil/kernel-left.cpp', 'w').write(left_code)
+    open(f'coil_backend/{program_name}.coil/kernel-right.cpp', 'w').write(right_code)
+    open(f'coil_backend/{program_name}.coil/kernel-label.cpp', 'w').write(label_code)
+    open(f'coil_backend/{program_name}.coil/model.cpp', 'w').write(model_code)
 
 
 def mux_network_codegen(challah_tree):
@@ -50,9 +39,9 @@ def mux_network_codegen(challah_tree):
 
 def main(args):
     try:
-        pita_program = expr.parse_file(open(args.file), parse_all=True)[0]
-    except ParseException as e:
-        raise SystemExit(f'Parse error: {e}')
+        pita_program = expr.parse_file(open(args.file, encoding='utf-8'), parse_all=True)[0]
+    except ParseException as parse_exception:
+        raise SystemExit(f'Parse error: {parse_exception}') from parse_exception
 
     challah_tree = compile(pita_program)
     
