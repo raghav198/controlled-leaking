@@ -9,7 +9,7 @@ expr = pp.Forward()
 func_def = pp.Forward()
 op = pp.Literal('+') | '-' | '*'
 literal_num = pp.Word(pp.nums)
-ctxt_input = pp.Literal('input') + '(' + literal_num + ')' # eventually make this be party-specific as well
+ctxt_input = pp.Literal('&') + literal_num # eventually make this be party-specific as well
 arith = '(' + num_expr + op + num_expr + ')'
 let = pp.Literal('let') + var + '=' + expr + 'in' + num_expr
 cond_op = pp.Literal('<') | '=='
@@ -19,7 +19,10 @@ func_def <<= pp.Literal('\\') + '(' + pp.Group(pp.delimited_list(var, ',')) + ')
 func_call = var + '(' + pp.Group(pp.delimited_list(num_expr, ',')) + ')'
 index_expr = (pp.Suppress('@') + num_expr + '[' + single_num_expr + ']')
 
-single_num_expr <<= cond | let | arith | ctxt_input | func_call | var | index_expr | literal_num
+single_array_update = (single_num_expr + pp.Suppress(':=') + single_num_expr).set_parse_action(tuple)
+array_update = pp.Literal('update') + var + '{' + pp.Group(pp.delimited_list(single_array_update, ',')) + '}' + 'in' + num_expr
+
+single_num_expr <<= cond | let | array_update | arith | ctxt_input | func_call | var | index_expr | literal_num
 num_expr <<= single_num_expr | (pp.Suppress('[') + pp.Group(pp.delimited_list(single_num_expr, ';')) + pp.Suppress(']')).set_parse_action(lambda n: pita.PitaArrayExpr(list(n[0])))
 expr <<= func_def | num_expr
 
@@ -30,13 +33,16 @@ def VarAction(n):
     return pita.PitaVarExpr(n[0])
 
 def CtxtAction(n):
-    return pita.PitaVarExpr(f'input#{n[2]}')
+    return pita.PitaVarExpr(f'input#{n[1]}')
 
 def ArithAction(n):
     return pita.PitaArithExpr(n[1], n[2], n[3])
 
 def LetAction(n):
     return pita.PitaLetExpr(n[1].name, n[3], n[5])
+
+def UpdateAction(n):
+    return pita.PitaUpdateExpr(n[1].name, n[3], n[6])
 
 def CondAction(n):
     return pita.PitaCondExpr(n[2], n[3] == '<', n[4], n[7], n[11])
@@ -56,6 +62,7 @@ arith.set_parse_action(ArithAction)
 cond.set_parse_action(CondAction)
 func_def.set_parse_action(FuncDefAction)
 func_call.set_parse_action(FuncCallAction)
+array_update.set_parse_action(UpdateAction)
 if __name__ == '__main__':
     from sys import argv
     # print(open(argv[1]).read())

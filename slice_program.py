@@ -2,6 +2,7 @@ from holla import ChallahArray, ChallahBranch, ChallahTree, ChallahLeaf, Challah
 from slicing_dp import Branch, Leaf, Tree, SliceCalculator, compute_N_slices
 from greedy_entropy import entropy_slice
 
+
 def cost(leaf: ChallahLeaf | list[ChallahLeaf], op_costs={'+': 1, '-': 1, '*': 10}) -> float:
     if isinstance(leaf, list):
         return sum(map(cost, leaf))
@@ -37,7 +38,8 @@ def get_layer(tree: Tree, slc: set[int], calc: SliceCalculator) -> tuple[Tree, l
     # print('prefixed tree: ')
     # basic_pprint(prefix_to(tree, slc))
     return prefix_to(tree, slc), layer
-    
+
+
 def basic_pprint(tree: Tree, depth: int = 0, start=''):
     if isinstance(tree, Branch):
         print(f'{" " * depth * 4}{start}{tree.tag}{"+" if tree.backref is not None else "-"}')
@@ -46,25 +48,26 @@ def basic_pprint(tree: Tree, depth: int = 0, start=''):
     else:
         print(' ' * depth * 4 + start + str(tree.tag) + ("+" if tree.backref is not None else "-"))
 
+
 def compute_slices(num_slices: int, entropy_limit: float, prog: ChallahTree):
-    
+
     tree = challah_to_basic(prog)
-    
+
     num_slices -= 1
-    
+
     # compute the entropy slice first
     bottom, calc = entropy_slice(tree, entropy_limit)
     # basic_pprint(tree)
     # print(f'Entropy slice: {bottom}')
-        
+
     new_tree, bottom_layer = get_layer(tree, bottom, calc)
     # print('new tree: ')
-    
+
     new_calc = SliceCalculator(new_tree)
-    new_calc.enumerate_children() # the backrefs should still be fine
+    new_calc.enumerate_children()  # the backrefs should still be fine
     # basic_pprint(new_tree)
     slices, _ = compute_N_slices(new_calc, num_slices)
-    
+
     # print('slices: ', slices)
     layers = [bottom_layer]
     for slc in slices:
@@ -79,11 +82,9 @@ def abstract_invoke(prog: ChallahTree, ref: ChallahTree, tag: int):
         return ChallahVar(f'__INVOKE__({tag})')
     if not isinstance(prog, ChallahBranch):
         return prog
-    return ChallahBranch(prog.left, prog.right, abstract_invoke(prog.true, ref, tag), abstract_invoke(prog.false, ref, tag))
-    
-    
+    return ChallahBranch(prog.left, prog.lt, prog.right, abstract_invoke(prog.true, ref, tag), abstract_invoke(prog.false, ref, tag))
 
-    
+
 def get_interactive_layers(prog: ChallahTree, num_slices: int, entropy_limit: float):
     layers = compute_slices(num_slices, entropy_limit, prog)
     prog_layers: list[list[ChallahTree]] = []
@@ -94,13 +95,13 @@ def get_interactive_layers(prog: ChallahTree, num_slices: int, entropy_limit: fl
         for tree in layer:
             if tree.backref is None:
                 continue
-            
+
             # first, remove everything from the previous layers
             cur_piece = tree.backref
-            if prog_layers:     
+            if prog_layers:
                 for i, p in enumerate(prog_layers_unab[-1]):
                     cur_piece = abstract_invoke(cur_piece, p, i)
-                
+
             prog_layer.append(cur_piece)
             # keep the unabstracted references around to use when deleting other stuff?
             # TODO: think of a less cursed way to do this. Or don't. I couldn't care less.
@@ -110,12 +111,13 @@ def get_interactive_layers(prog: ChallahTree, num_slices: int, entropy_limit: fl
         prog_layers_unab.append(prog_layer_unab)
     return prog_layers, layers
 
+
 if __name__ == '__main__':
     # hll = gcd(PitaVarExpr('a'), PitaVarExpr('b'), 7)
 
     from sys import argv
     from pita_parser import expr
-    
+
     hll = expr.parse_file(open(argv[1]), parse_all=True)[0]
 
     print('-' * 10)
@@ -127,7 +129,7 @@ if __name__ == '__main__':
     num_slices = 2
     entropy_limit = 4
     prog_layers, layers = get_interactive_layers(prog, num_slices, entropy_limit)
-    
+
     # while True:
     #     try:
     #         prog_layers = get_interactive_layers(prog, num_slices, entropy_limit)
@@ -139,20 +141,16 @@ if __name__ == '__main__':
     #             continue
     #         else:
     #             raise e
-            
-    
+
     for layer in prog_layers[::-1]:
         for i, prog in enumerate(layer):
             print(f'---{i}---')
             pprint(prog)
         input()
-            
-    
+
     print('== BASIC MODE ==')
     for layer in layers[::-1]:
         for i, prog in enumerate(layer):
             print(f'---{i}---')
             basic_pprint(prog)
         input()
-            
-    

@@ -23,7 +23,7 @@ def generate_copse_data(tree: ChallahTree):
     return masks[::-1], matrices[::-1] # we compute these root to leaf, but COPSE expects them leaf to root
 
 
-def generate_copse_cpp(masks: list[list[int]], matrices: list[list[list[int]]], name: str):
+def generate_copse_cpp(masks: list[list[int]], matrices: list[list[list[int]]], name: str, eq_mask: str, lt_mask: str):
     mask_vectors = ',\n        '.join([str(mask).replace('[', '{').replace(']', '}') for mask in masks])
     
     
@@ -38,6 +38,8 @@ def generate_copse_cpp(masks: list[list[int]], matrices: list[list[list[int]]], 
         
     cpp = f"""
 #include <copse/model-owner.hpp>
+
+#include "../kernel.hpp"
 
 auto {name}_model() {{
     PtxtModelDescription model;
@@ -57,16 +59,14 @@ auto {name}_model() {{
     return model;
 }}
 
-class COILMaurice : public ModelOwner {{
-public:
-    COILMaurice(EncInfo& info) : ModelOwner(info) {{}}
-    virtual PtxtModelDescription plaintext_model() {{
-        return {name}_model();
-    }}
-    virtual CtxtModelDescription* GenerateModel() {{
-        return ModelOwner::GenerateModel();
-    }}
-}};
+std::string COILMaurice::eq_mask() {{ return "{eq_mask}"; }} 
+std::string COILMaurice::lt_mask() {{ return "{lt_mask}"; }}
+PtxtModelDescription COILMaurice::plaintext_model() {{
+    return {name}_model();
+}}
+CtxtModelDescription* COILMaurice::GenerateModel() {{
+    return ModelOwner::GenerateModel();
+}}
 """
     return cpp
 
@@ -96,7 +96,8 @@ def level_mask(tree: ChallahTree, depth: int, prev: int = -1) -> list[int]:
     
 
 def level_matrices(tree: Tree, level_masks: list[list[int]]):
-    assert isinstance(tree, Branch)
+    if not isinstance(tree, Branch):
+        return [[[]]]
     width = num_leaves(tree)
     level_parents: list[list[Branch]] = [[tree for _ in range(width)]]
     
