@@ -8,6 +8,7 @@ from coyote_lower import vectorize_decisions, vectorize_labels
 from holla import compile, pprint
 from mux_network import codegen_mux, num, to_cpp, to_mux_network
 from pita_parser import expr
+from syntax_errors import report_syntax_errors
 
 
 def coil_codegen(challah_tree, program_name):
@@ -49,7 +50,8 @@ def main(args):
     try:
         pita_program = expr.parse_file(open(args.file, encoding='utf-8'), parse_all=True)[0]
     except ParseException as parse_exception:
-        raise SystemExit(f'Parse error: {parse_exception}') from parse_exception
+        report_syntax_errors(args.file)
+        raise SystemExit(f'Parse error, exiting gracefully...') from parse_exception
 
     challah_tree = compile(pita_program)
     
