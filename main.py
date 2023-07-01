@@ -6,7 +6,7 @@ from pyparsing import ParseException
 from copse_lower import generate_copse_cpp, generate_copse_data
 from coyote_lower import vectorize_decisions, vectorize_labels
 from holla import compile, pprint
-from mux_network import codegen_mux, num, to_mux_network
+from mux_network import codegen_mux, num, to_cpp, to_mux_network
 from pita_parser import expr
 
 
@@ -31,7 +31,15 @@ def mux_network_codegen(challah_tree):
         for i, bit in enumerate(network.bits):
             print(f'[{i}] {bit}')
         vector_code = codegen_mux(network)
+        prep, cpp = to_cpp(vector_code)
+        print('Coyote IR:')
         for line in vector_code:
+            print(f'  {line}')
+        print('Prep: ')
+        for line in prep:
+            print(f'  {line}')
+        print('C++:')
+        for line in cpp:
             print(f'  {line}')
     else:
         print('[ERROR] Array codegen is not implemented yet!')
@@ -63,7 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('file')
 
     parser.add_argument('-b', '--backend', type=str, choices=['mux', 'coil'], default='coil')
-    parser.add_argument('-s', '--show-tree', action='store_true', help='Show generated decision tree and quit')
+    parser.add_argument('-s', '--show-tree', action='store_true', help='Show generated decision tree and exit')
 
     # parser.add_argument('-e', '--entropy', type=float, help='Maximum allowed information leakage (in bits)')
     # parser.add_argument('-r', '--num-rounds', type=int, help='Maximum number of communication rounds allowed')

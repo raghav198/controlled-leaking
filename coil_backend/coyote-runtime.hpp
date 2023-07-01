@@ -22,6 +22,7 @@ ctxt mul(ctxt a, ctxt b, std::vector<helib::zzX> * unpackSlotEncoding = nullptr)
 
 ctxt rotate(ctxt val, int amount);
 ctxt blend(std::initializer_list<std::pair<ctxt, helib::Ptxt<helib::BGV>>> sources);
+ctxt_bit blend_bits(std::initializer_list<std::pair<ctxt_bit, helib::Ptxt<helib::BGV>>> sources);
 
 ctxt encrypt(EncInfo& info, ptxt n);
 ptxt decrypt(EncInfo& info, ctxt c);

@@ -19,7 +19,6 @@ ctxt truncate(ctxt val, int width) {
 }
 
 ctxt add(ctxt a, ctxt b, std::vector<helib::zzX> * unpackSlotEncoding) {
-    std::cout << "a: " << a.size() << "bits; b: " << b.size() << "bits\n";
     assert(a.size() == b.size());
     ctxt result;
     helib::CtPtrs_vectorCt result_wrapped(result);
@@ -28,7 +27,6 @@ ctxt add(ctxt a, ctxt b, std::vector<helib::zzX> * unpackSlotEncoding) {
 }
 
 ctxt sub(ctxt a, ctxt b, std::vector<helib::zzX> * unpackSlotEncoding) {
-    std::cout << "a: " << a.size() << "bits; b: " << b.size() << "bits\n";
     assert(a.size() == b.size());
     ctxt result(a);
     helib::CtPtrs_vectorCt result_wrapped(result);
@@ -37,7 +35,6 @@ ctxt sub(ctxt a, ctxt b, std::vector<helib::zzX> * unpackSlotEncoding) {
 }
 
 ctxt mul(ctxt a, ctxt b, std::vector<helib::zzX> * unpackSlotEncoding) {
-    std::cout << "a: " << a.size() << "bits; b: " << b.size() << "bits\n";
     assert(a.size() == b.size());
     ctxt result;
     helib::CtPtrs_vectorCt result_wrapped(result);
@@ -71,6 +68,29 @@ ctxt blend(std::initializer_list<std::pair<ctxt, helib::Ptxt<helib::BGV>>> sourc
     helib::CtPtrs_vectorCt result_wrapped(result);
     auto wrapped_sources = helib::CtPtrMat_vectorCt(masked_sources);
     helib::addManyNumbers(result_wrapped, wrapped_sources, bitwidth);
+
+    // relinearize once at the end
+    for (auto & bit : result)
+        bit.reLinearize();
+    
+    return result;
+}
+
+
+ctxt_bit blend_bits(std::initializer_list<std::pair<ctxt_bit, helib::Ptxt<helib::BGV>>> sources) {
+    std::vector<ctxt_bit> masked_sources;
+    for (auto source : sources) {
+        ctxt_bit masked_bit(source.first);
+        masked_bit *= source.second;
+        masked_sources.push_back(masked_bit);
+    }
+
+    ctxt_bit result(masked_sources[0]);
+    for (int i = 1; i < masked_sources.size(); i++)
+        result += masked_sources[i];
+
+    result.reLinearize();
+    
     return result;
 }
 
