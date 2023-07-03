@@ -1,0 +1,20 @@
+
+#include "kernel.hpp"
+COILLabels::COILLabels(EncInfo& info) : CoyoteKernel(info, 67) {}
+
+void COILLabels::Prepare(std::unordered_map<std::string, int> inputs) {
+    ptxt t0{inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#4"], inputs["input#4"], inputs["input#4"], inputs["input#4"], inputs["input#4"], inputs["input#4"], inputs["input#4"], inputs["input#5"], inputs["input#5"], inputs["input#5"], inputs["input#5"], inputs["input#5"], inputs["input#5"], inputs["input#6"], inputs["input#6"], inputs["input#6"], inputs["input#6"], inputs["input#6"], inputs["input#7"], inputs["input#7"], inputs["input#7"], inputs["input#7"], inputs["input#8"], inputs["input#8"], inputs["input#8"], inputs["input#9"], inputs["input#9"], 0, 0};
+        input_wires.push_back(encrypt(info, t0));
+        ptxt t1{inputs["input#0"], inputs["input#1"], inputs["input#2"], inputs["input#3"], inputs["input#4"], inputs["input#5"], inputs["input#6"], inputs["input#7"], inputs["input#8"], inputs["input#9"], 0, inputs["input#0"], inputs["input#2"], inputs["input#3"], inputs["input#4"], inputs["input#5"], inputs["input#6"], inputs["input#7"], inputs["input#8"], inputs["input#9"], 0, inputs["input#0"], inputs["input#3"], inputs["input#4"], inputs["input#5"], inputs["input#6"], inputs["input#7"], inputs["input#8"], inputs["input#9"], 0, inputs["input#0"], inputs["input#4"], inputs["input#5"], inputs["input#6"], inputs["input#7"], inputs["input#8"], inputs["input#9"], 0, inputs["input#0"], inputs["input#5"], inputs["input#6"], inputs["input#7"], inputs["input#8"], inputs["input#9"], 0, inputs["input#0"], inputs["input#6"], inputs["input#7"], inputs["input#8"], inputs["input#9"], 0, inputs["input#0"], inputs["input#7"], inputs["input#8"], inputs["input#9"], 0, inputs["input#0"], inputs["input#8"], inputs["input#9"], 0, inputs["input#0"], inputs["input#9"], 0, inputs["input#0"], 0, inputs["input#0"], 0};
+        input_wires.push_back(encrypt(info, t1));
+        ptxt t2{inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#0"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#1"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#2"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#3"], inputs["input#4"], inputs["input#4"], inputs["input#4"], inputs["input#4"], inputs["input#4"], inputs["input#4"], inputs["input#4"], inputs["input#5"], inputs["input#5"], inputs["input#5"], inputs["input#5"], inputs["input#5"], inputs["input#5"], inputs["input#6"], inputs["input#6"], inputs["input#6"], inputs["input#6"], inputs["input#6"], inputs["input#7"], inputs["input#7"], inputs["input#7"], inputs["input#7"], inputs["input#8"], inputs["input#8"], inputs["input#8"], inputs["input#9"], inputs["input#9"], 0, 0};
+        input_wires.push_back(encrypt(info, t2));
+        add_masks({});
+}
+
+void COILLabels::Compute() {
+    auto v0 = add(input_wires[0], input_wires[1]);
+        auto v1 = mul(input_wires[2], v0);
+        output_wires.push_back(v1);
+}
+    

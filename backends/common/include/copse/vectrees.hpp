@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COPSE_VECTREES_HPP
+#define COPSE_VECTREES_HPP
 
 #include <NTL/BasicThreadPool.h>
 #include <chrono>
@@ -37,6 +38,7 @@ using zzx_mat = std::vector<zzx_vec>;
 #define NTL_EXEC_INDEX(N, i) for (int i = 0; i < (N); i++)
 #define NTL_EXEC_INDEX_END
 #endif
+
 
 struct EncInfo
 {
@@ -78,10 +80,11 @@ template <typename Unit> class Timer
     }
 };
 
+ptxt_vec pad_vector(ptxt_vec vec, int positive_pads, int negative_pads, int nslots);
 std::vector<ptxt_vec> decompose_bits(ptxt_vec values, int bitwidth);
-ctxt_vec encrypt_vector(const EncInfo &, ptxt_vec);
+ctxt_vec encrypt_vector(const EncInfo &, ptxt_vec, int positive_pads = 1, int negative_pads = 1);
 ptxt_vec decrypt_vector(const EncInfo &, ctxt_vec);
-zzx_vec encode_vector(const EncInfo &, ptxt_vec);
+zzx_vec encode_vector(const EncInfo &, ptxt_vec, int positive_pads = 1, int negative_pads = 1);
 ptxt_vec decode_vector(const EncInfo &, zzx_vec);
 ctxt_mat encrypt_matrix(const EncInfo &, ptxt_mat);
 zzx_mat encode_matrix(const EncInfo &, ptxt_mat);
@@ -92,3 +95,5 @@ ctxt_vec mat_mul(zzx_mat, std::vector<ctxt_vec>);
 ctxt_vec mat_mul(ctxt_mat, std::vector<ctxt_vec>);
 zzx_vec mat_mul(zzx_mat, std::vector<zzx_vec>);
 void print_vec(std::ostream &, ptxt_vec);
+
+#endif

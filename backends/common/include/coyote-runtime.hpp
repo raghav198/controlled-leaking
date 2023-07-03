@@ -13,7 +13,7 @@ using ptxt = std::vector<long>;
 
 constexpr int bitwidth = 8;
 
-zzx_vec make_mask(EncInfo& info, std::string data);
+zzx_vec make_mask(EncInfo& info, std::string data, int positive_pads = 1, int negative_pads = 1);
 ctxt truncate(ctxt val, int width);
 
 ctxt add(ctxt a, ctxt b, std::vector<helib::zzX> * unpackSlotEncoding = nullptr);

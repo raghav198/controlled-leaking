@@ -2,6 +2,7 @@
 
 #include <iterator>
 
+
 // return a vector of generalized diagonals of 'mat'
 ptxt_mat get_diagonals(ptxt_mat mat)
 {
@@ -35,18 +36,55 @@ std::vector<ptxt_vec> decompose_bits(ptxt_vec values, int bitwidth)
     return bitvecs;
 }
 
+ptxt_vec pad_vector(ptxt_vec vec, int positive_pads, int negative_pads, int nslots)
+{
+
+#ifdef DEBUG
+    std::cout << "Before padding:\n";
+    for (auto val : vec) std::cout << val;
+    std::cout << "\n";
+#endif
+    int sz = vec.size();
+    vec.resize(nslots);
+
+    int slots_used = sz * (1 + positive_pads + negative_pads);
+
+    if (slots_used > nslots) {
+        throw std::runtime_error("Not enough slots to encode vector; try adding more slots or reducing padding!");
+    }
+
+    for (int i = 0; i < sz * positive_pads; i++) {
+        vec[nslots - sz * positive_pads + i] = vec[i % sz];
+    }
+
+    for (int i = 0; i < sz * negative_pads; i++) {
+        vec[sz + i] = vec[i];
+    }
+
+#ifdef DEBUG
+    std::cout << "After padding (" << positive_pads << "; -" << negative_pads << ")\n";
+    for (auto val : vec) std::cout << val;
+    std::cout << "\n";
+#endif 
+
+
+    return vec;
+}
+
 // turn a vector of 'long' into a single ciphertext
-ctxt_vec encrypt_vector(const EncInfo &info, ptxt_vec ptxt)
+ctxt_vec encrypt_vector(const EncInfo &info, ptxt_vec ptxt, int positive_pads, int negative_pads)
 {
     helib::PubKey &pk = *info.sk;
     auto ea = info.context.getEA();
 
-    int sz = ptxt.size();
-    ptxt.resize(ea.size());
-    for (int i = 0; i < sz; i++) {
-        ptxt[ea.size() - sz + i] = ptxt[i];
-        ptxt[sz + i] = ptxt[i];
-    }
+    ptxt = pad_vector(ptxt, positive_pads, negative_pads, info.nslots);
+
+    // int sz = ptxt.size();
+    // ptxt.resize(ea.size());
+    // for (int i = 0; i < sz; i++) {
+    //     ptxt[ea.size() - sz + i] = ptxt[i];
+    //     ptxt[sz + i] = ptxt[i];
+    // }
     ctxt_vec zero_pad(pk);
 
     ea.encrypt(zero_pad, pk, ptxt);
@@ -77,19 +115,10 @@ ctxt_mat encrypt_matrix(const EncInfo &info, ptxt_mat ptxt)
 }
 
 // Encode a vector into a plaintext polynomial
-zzx_vec encode_vector(const EncInfo &info, ptxt_vec vec)
+zzx_vec encode_vector(const EncInfo &info, ptxt_vec vec, int positive_pads, int negative_pads)
 {
     auto ea = info.context.getEA();
-    int sz = vec.size();
-    vec.resize(info.nslots);
-
-    for (int i = 0; i < sz; i++) {
-        vec[ea.size() - sz + i] = vec[i];
-        vec[sz + i] = vec[i];
-    }
-
-    helib::Ptxt<helib::BGV> ptxt(info.context, vec);
-
+    vec = pad_vector(vec, positive_pads, negative_pads, info.nslots);
     zzx_vec pp(info.context, vec);
 
     return pp;

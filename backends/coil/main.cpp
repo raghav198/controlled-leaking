@@ -74,7 +74,7 @@ int main(int argc, char * argv[])
 
     inp.add_arr({2, 4, 3, 1, 5, 6, 8, 6, 7, 9});
     inp.add_num(3);
-    inp.add_num(4);
+    inp.add_num(2);
 
     ctxt_bit scratch = encrypt_vector(info, std::vector<long>());
 

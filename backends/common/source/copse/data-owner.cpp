@@ -1,4 +1,4 @@
-#include "data-owner.hpp"
+#include "../../include/copse/data-owner.hpp"
 #include <iostream>
 
 #ifdef PTXT_DATA

@@ -1,12 +1,12 @@
-#include "coyote-runtime.hpp"
+#include <coyote-runtime.hpp>
 
-zzx_vec make_mask(EncInfo& info, std::string data) {
+zzx_vec make_mask(EncInfo& info, std::string data, int positive_pads, int negative_pads) {
     std::vector<long> mask_data;
     for (auto c : data)
         mask_data.push_back(c - '0');
-    // add the padded version so when we rotate it all works fine
-    for (auto c : data)
-        mask_data.push_back(c - '0');
+    
+    mask_data = pad_vector(mask_data, positive_pads, negative_pads, info.nslots);
+
     return zzx_vec(info.context, mask_data);
 }
 
