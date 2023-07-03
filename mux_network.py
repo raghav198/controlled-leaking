@@ -1,4 +1,6 @@
+from collections import defaultdict
 from dataclasses import dataclass
+from math import ceil
 from typing import Callable, ClassVar, cast
 
 from coyote import coyote_ast
@@ -183,14 +185,20 @@ def to_cpp(code: list[VecInstr], vout: int, output_lanes: list[int]):
     num_ptxts: int = 0
     num_ctxts: int = 0
     
+    rotations: dict[str, int] = defaultdict(int)
+    
     for line in code:
         match line:
             case VecRotInstr(dest, operand, shift):
+                rotations[reg2var(dest)] = rotations[reg2var(operand)] + shift
+                
                 compute_lines += [
                     f'ctxt_bit {reg2var(dest)} = {reg2var(operand)};',
                     f'info.context.getEA().rotate({reg2var(dest)}, {shift});',
                 ]
+                
             case VecOpInstr(dest, op, lhs, rhs):
+                rotations[reg2var(dest)] = rotations[reg2var(lhs)] + rotations[reg2var(rhs)]
                 
                 if op == '-':
                     op = '+'
@@ -212,6 +220,7 @@ def to_cpp(code: list[VecInstr], vout: int, output_lanes: list[int]):
                     f'ctxt_bit {reg2var(dest)} = {reg2var(lhs)};',
                     f'{reg2var(dest)}.multiplyBy({reg2var(rhs)});' if op == '*' and not reg2var(rhs).startswith('data.plaintexts') else f'{reg2var(dest)} {op}= {reg2var(rhs)};'
                 ]
+                
             case VecLoadInstr(dest, src):
                 aliases[dest] = src
             case VecConstInstr(dest, vals):
@@ -221,7 +230,7 @@ def to_cpp(code: list[VecInstr], vout: int, output_lanes: list[int]):
                 encoder = 'encrypt_vector' if to_encrypt else 'encode_vector'
                 prep_lines += [
                     f'ptxt {reg2var(dest)}{{{", ".join(ptxt_vec)}}};',
-                    f'{prep_dest}.push_back({encoder}(info, {reg2var(dest)}));'
+                    f'{prep_dest}.push_back({encoder}(info, {reg2var(dest)}, pad_count, 1));'
                 ]
                 
                 if prep_dest == 'data.ciphertexts':
@@ -231,6 +240,8 @@ def to_cpp(code: list[VecInstr], vout: int, output_lanes: list[int]):
                 
                 aliases[dest] = f'{prep_dest}[{dest_idx}]'
             case VecBlendInstr(dest, vals, masks):
+                rotations[reg2var(dest)] = max(rotations[reg2var(val)] for val in vals)
+                
                 all_masks |= {'"' + ''.join(map(str, mask)) + '"' for mask in masks}
                 args = [f'{{{reg2var(val)}, data.masks["{"".join(map(str, mask))}"]}}' for val, mask in zip(vals, masks)]
                 compute_lines += [
@@ -250,13 +261,15 @@ def to_cpp(code: list[VecInstr], vout: int, output_lanes: list[int]):
     prep = "\n    ".join(prep_lines)
     compute = "\n    ".join(compute_lines)
     
+    width = len(next(iter(all_masks)))
+    
     return f"""
 #include <helib/FHE.h>
 
 #include "mux-common.hpp"
 
 #ifdef DEBUG
-#define show(x) _show(info, x, #x, {len(next(iter(all_masks)))})
+#define show(x) _show(info, x, #x, {width})
 #else
 #define show(x)
 #endif
@@ -280,6 +293,7 @@ compute_data Prep(EncInfo & info, std::unordered_map<std::string, int> inputs)
 {{
 
     compute_data data;
+    int pad_count = {ceil(max(rotations.values()) / width)};
     
     {prep}
 }}
@@ -290,13 +304,43 @@ ctxt_bit Compute(EncInfo & info, compute_data data)
 }}
     """
 
-            
+def fixpoint(f):
+    def inner(c, maxdepth=3):
+        new_c = None
+        for _ in range(maxdepth):
+            new_c = f(c)
+            if c == new_c:
+                break
+            c = new_c
+
+        return new_c
+        
+        
+    return inner
+
+@fixpoint
+def optimize_circuit(circuit: bit) -> bit:
+    match circuit:
+        case coyote_ast.Var(_):
+            return circuit
+        case coyote_ast.Op(op, lhs, rhs):
+            match op, lhs, rhs:
+                case ('+', coyote_ast.Var('0'), expr) | ('+', expr, coyote_ast.Var('0')):
+                    return optimize_circuit(expr)
+                case ('*', coyote_ast.Var('0'), expr) | ('*', expr, coyote_ast.Var('0')):
+                    return coyote_ast.Var('0')
+                case ('*', coyote_ast.Var('1'), expr) | ('*', expr, coyote_ast.Var('1')):
+                    return optimize_circuit(expr)
+                case _:
+                    return coyote_ast.Op(op, optimize_circuit(lhs), optimize_circuit(rhs))
+
+    raise TypeError(type(circuit))
 
 
 def codegen_mux(circuit: num):
     compiler = CompilerV2()
     outputs: list[int] = [cast(int, compiler.compile(bit).val) for bit in circuit.bits]
-    print('\n'.join(map(str, compiler.code)))
+    # print('\n'.join(map(str, compiler.code)))
     lanes, align = [], []
     vectorized_code = vectorize(compiler, output_groups=[{*outputs}], lanes_out=lanes, align_out=align)
     

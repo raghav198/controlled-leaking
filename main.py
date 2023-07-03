@@ -6,7 +6,7 @@ from pyparsing import ParseException
 from copse_lower import generate_copse_cpp, generate_copse_data
 from coyote_lower import vectorize_decisions, vectorize_labels
 from holla import compile, pprint
-from mux_network import codegen_mux, num, to_cpp, to_mux_network
+from mux_network import codegen_mux, num, optimize_circuit, to_cpp, to_mux_network
 from pita_parser import expr
 from syntax_errors import report_syntax_errors
 
@@ -31,6 +31,10 @@ def coil_codegen(challah_tree, program_name, coil_root = 'backends/coil/coil_pro
 def mux_network_codegen(challah_tree, program_name, mux_root = 'backends/muxes'):
     network = to_mux_network(challah_tree)
     if isinstance(network, num):
+        for i, bit in enumerate(network.bits):
+            print(f'[{i}] {bit}')
+        print('Optimizing...')
+        network.bits = [optimize_circuit(b) for b in network.bits]
         for i, bit in enumerate(network.bits):
             print(f'[{i}] {bit}')
         vector_code, vout, lanes = codegen_mux(network)
