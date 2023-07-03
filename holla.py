@@ -9,6 +9,7 @@ from pita import (PitaArithExpr, PitaArrayExpr, PitaCondExpr, PitaExpr,
                   PitaLetExpr, PitaNumExpr, PitaSingleNumExpr, PitaUpdateExpr,
                   PitaVarExpr, pita_map, pita_num_map)
 from typecheck import is_ptxt
+from coyote.disjoint_set import DisjointSet
 
 
 def assert_compatible(left, right):
@@ -23,7 +24,7 @@ def assert_compatible(left, right):
         assert len(left) == len(right)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ChallahVar:
     name: str
 
@@ -34,7 +35,7 @@ class ChallahVar:
         return self
 
 
-@dataclass
+@dataclass(frozen=True)
 class ChallahArithExpr:
     # check sizes
     def __post_init__(self):
@@ -57,7 +58,7 @@ class ChallahArithExpr:
         return self
 
 
-@dataclass
+@dataclass(frozen=True)
 class ChallahArray:
     elems: list[ChallahVar | ChallahArithExpr]
 
@@ -259,14 +260,28 @@ def substitute_all(expr: PitaExpr):
             return pita_num_map(expr, substitute_all)
 
 
-def comparison_folding(tree: ChallahTree, known: list[tuple[ChallahLeaf, ChallahLeaf]] = []):
+def comparison_folding(tree: ChallahTree, known: list[tuple[ChallahLeaf, ChallahLeaf]] = [], equalities: DisjointSet[ChallahLeaf] = DisjointSet()):
     match tree:
         case ChallahBranch(left, lt, right, true, false):
-            if (left, right) in known:
-                return comparison_folding(true, known)
-            if (right, left) in known and lt:
-                return comparison_folding(false, known)
-            return ChallahBranch(left, lt, right, comparison_folding(true, known + [(left, right)]), comparison_folding(false, known + [(right, left)]))
+            if lt:
+                if (left, right) in known:
+                    return comparison_folding(true, known, equalities)
+                if (right, left) in known:
+                    return comparison_folding(false, known, equalities)
+                return ChallahBranch(left, lt, right, comparison_folding(true, known + [(left, right)], equalities), comparison_folding(false, known + [(right, left)], equalities))
+            else:
+                if equalities.contains(left) and equalities.contains(right):
+                    if equalities.is_equivalent(left, right):
+                        return comparison_folding(true, known, equalities)
+                    return comparison_folding(false, known, equalities)
+                
+                true_branch = equalities.copy()
+                if not true_branch.contains(left): true_branch.add(left)
+                if not true_branch.contains(right): true_branch.add(right)
+                
+                false_branch = true_branch.copy()
+                true_branch.union(left, right)
+                return ChallahBranch(left, lt, right, comparison_folding(true, known, true_branch), comparison_folding(false, known, false_branch))
         case _:
             return tree
 
