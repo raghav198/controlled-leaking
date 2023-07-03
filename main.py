@@ -11,37 +11,33 @@ from pita_parser import expr
 from syntax_errors import report_syntax_errors
 
 
-def coil_codegen(challah_tree, program_name):
+def coil_codegen(challah_tree, program_name, coil_root = 'backends/coil/coil_programs'):
+    program_root = f'{coil_root}/{program_name}.coil'
+    
     left_code, right_code, lt_mask, eq_mask = vectorize_decisions(challah_tree)
 
     label_code = vectorize_labels(challah_tree)
     masks, levels = generate_copse_data(challah_tree)
     model_code = generate_copse_cpp(masks, levels, program_name, eq_mask, lt_mask)
 
-    os.makedirs(f'backend/{program_name}.coil/', exist_ok=True)
+    os.makedirs(program_root, exist_ok=True)
 
-    open(f'coil_backend/{program_name}.coil/kernel-left.cpp', 'w').write(left_code)
-    open(f'coil_backend/{program_name}.coil/kernel-right.cpp', 'w').write(right_code)
-    open(f'coil_backend/{program_name}.coil/kernel-label.cpp', 'w').write(label_code)
-    open(f'coil_backend/{program_name}.coil/model.cpp', 'w').write(model_code)
+    open(f'{program_root}/kernel-left.cpp', 'w').write(left_code)
+    open(f'{program_root}/kernel-right.cpp', 'w').write(right_code)
+    open(f'{program_root}/kernel-label.cpp', 'w').write(label_code)
+    open(f'{program_root}/model.cpp', 'w').write(model_code)
 
 
-def mux_network_codegen(challah_tree):
+def mux_network_codegen(challah_tree, program_name, mux_root = 'backends/muxes'):
     network = to_mux_network(challah_tree)
     if isinstance(network, num):
         for i, bit in enumerate(network.bits):
             print(f'[{i}] {bit}')
-        vector_code = codegen_mux(network)
-        prep, cpp = to_cpp(vector_code)
-        print('Coyote IR:')
-        for line in vector_code:
-            print(f'  {line}')
-        print('Prep: ')
-        for line in prep:
-            print(f'  {line}')
-        print('C++:')
-        for line in cpp:
-            print(f'  {line}')
+        vector_code, vout, lanes = codegen_mux(network)
+        code = to_cpp(vector_code, vout, lanes)
+        
+        open(f'{mux_root}/{program_name}.cpp', 'w').write(code)
+        
     else:
         print('[ERROR] Array codegen is not implemented yet!')
 
@@ -63,7 +59,7 @@ def main(args):
     program_name = os.path.splitext(os.path.basename(args.file))[0]
 
     if args.backend == 'mux':
-        mux_network_codegen(challah_tree)
+        mux_network_codegen(challah_tree, program_name)
     else:
         coil_codegen(challah_tree, program_name)
 

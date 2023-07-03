@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, ClassVar, cast
 
 from coyote import coyote_ast
 from coyote.codegen import (VecBlendInstr, VecConstInstr, VecInstr,
@@ -12,17 +12,18 @@ from holla import (ChallahArithExpr, ChallahArray, ChallahBranch, ChallahLeaf,
 
 bit = coyote_ast.Expression
 
-bitwidth = 2
-
 
 @dataclass
 class num:
     """Bits of a number represented least significant bit first (e.g. `12` as a four bit number is `0011`)"""
+    
+    bitwidth: ClassVar[int] = 2
+    
     bits: list[bit]
 
     def __post_init__(self):
-        assert len(self.bits) <= bitwidth
-        while len(self.bits) < bitwidth:
+        assert len(self.bits) <= num.bitwidth
+        while len(self.bits) < num.bitwidth:
             self.bits.append(coyote_ast.Var('0'))
 
 
@@ -72,8 +73,8 @@ def mux_arrays(condition: bit, trues: num_array, falses: num_array) -> num_array
 
 def to_bits(val: int, twos_complement=True) -> num:
     if twos_complement and val < 0:
-        val += 2 ** (bitwidth - 1)
-    assert val < 2 ** bitwidth, f'Value {val} too big for {bitwidth} bits'
+        val += 2 ** (num.bitwidth - 1)
+    assert val < 2 ** num.bitwidth, f'Value {val} too big for {num.bitwidth} bits'
     return num([coyote_ast.Var(b) for b in bin(val)[2:][::-1]])
 
 
@@ -97,7 +98,7 @@ def add(left: num, right: num) -> num:
 def mul(left: num, right: num) -> num:
     product_bits: list[bit] = []
 
-    for k in range(bitwidth):
+    for k in range(num.bitwidth):
         accumulate = []
         for i in range(k + 1):
             accumulate.append(left.bits[i] * right.bits[k - i])
@@ -115,7 +116,7 @@ def num_circuit(expr: ChallahLeaf) -> num:
         case ChallahVar(name):
             if name.isnumeric():
                 return to_bits(int(name))
-            return num([coyote_ast.Var(f'{name}.{b}') for b in range(bitwidth)])
+            return num([coyote_ast.Var(f'{name}.{b}') for b in range(num.bitwidth)])
         case ChallahArithExpr(left, op, right):
             if op == '+':
                 return add(num_circuit(left), num_circuit(right))
@@ -167,7 +168,7 @@ def to_mux_network(tree: ChallahTree) -> num | num_array:
             raise TypeError(type(tree))
 
 
-def to_cpp(code: list[VecInstr]):
+def to_cpp(code: list[VecInstr], vout: int, output_lanes: list[int]):
 
     def reg2var(reg: str) -> str:
         if reg in aliases:
@@ -175,15 +176,19 @@ def to_cpp(code: list[VecInstr]):
         return reg[2:]
 
     aliases: dict[str, str] = {}
-    cpp: list[str] = []
-    prep_code: list[str] = []
+    compute_lines: list[str] = []
+    prep_lines: list[str] = []
     all_masks: set[str] = set()
+    
+    num_ptxts: int = 0
+    num_ctxts: int = 0
+    
     for line in code:
         match line:
             case VecRotInstr(dest, operand, shift):
-                cpp += [
+                compute_lines += [
                     f'ctxt_bit {reg2var(dest)} = {reg2var(operand)};',
-                    f'info.ea.rotate({reg2var(dest)}, {shift});'
+                    f'info.context.getEA().rotate({reg2var(dest)}, {shift});',
                 ]
             case VecOpInstr(dest, op, lhs, rhs):
                 
@@ -191,54 +196,113 @@ def to_cpp(code: list[VecInstr]):
                     op = '+'
                     print('[WARN] No subtraction in mod 2 >:(')
                 
-                if reg2var(lhs).startswith('plaintexts') and reg2var(rhs).startswith('plaintexts'):
-                    cpp += [
-                        f'plaintexts["{dest}"] = {reg2var(lhs)};',
-                        f'plaintexts["{dest}"] {op}= {reg2var(rhs)};'
+                if reg2var(lhs).startswith('data.plaintexts') and reg2var(rhs).startswith('data.plaintexts'):
+                    compute_lines += [
+                        f'data.plaintexts.push_back({reg2var(lhs)});',
+                        f'data.plaintexts[{num_ptxts}] {op}= {reg2var(rhs)};'
                     ]
-                    aliases[dest] = f'plaintexts["{dest}"]'
+                    aliases[dest] = f'data.plaintexts["{num_ptxts}"]'
+                    num_ptxts += 1
                     continue
                 
-                if reg2var(lhs).startswith('plaintexts') and not reg2var(rhs).startswith('plaintexts'):
+                if reg2var(lhs).startswith('data.plaintexts') and not reg2var(rhs).startswith('data.plaintexts'):
                     lhs, rhs = rhs, lhs
                 
-                cpp += [
+                compute_lines += [
                     f'ctxt_bit {reg2var(dest)} = {reg2var(lhs)};',
-                    f'{reg2var(dest)}.multiplyBy({reg2var(rhs)});' if op == '*' else f'{reg2var(dest)} {op}= {reg2var(rhs)};'
+                    f'{reg2var(dest)}.multiplyBy({reg2var(rhs)});' if op == '*' and not reg2var(rhs).startswith('data.plaintexts') else f'{reg2var(dest)} {op}= {reg2var(rhs)};'
                 ]
             case VecLoadInstr(dest, src):
                 aliases[dest] = src
             case VecConstInstr(dest, vals):
                 ptxt_vec = [f'inputs["{val}"]' if not val.isnumeric() else val for val in vals]
                 to_encrypt = any(not val.isnumeric() for val in vals)
-                prep_dest = 'ciphertexts' if to_encrypt else 'plaintexts'
+                prep_dest = 'data.ciphertexts' if to_encrypt else 'data.plaintexts'
                 encoder = 'encrypt_vector' if to_encrypt else 'encode_vector'
-                prep_code += [
-                    f'ptxt_bit {reg2var(dest)}{{{", ".join(ptxt_vec)}}}',
-                    f'{prep_dest}["{reg2var(dest)}"] = {encoder}(info, {reg2var(dest)});'
+                prep_lines += [
+                    f'ptxt {reg2var(dest)}{{{", ".join(ptxt_vec)}}};',
+                    f'{prep_dest}.push_back({encoder}(info, {reg2var(dest)}));'
                 ]
                 
-                aliases[dest] = f'{prep_dest}["{reg2var(dest)}"]'
+                if prep_dest == 'data.ciphertexts':
+                    num_ctxts, dest_idx = num_ctxts + 1, num_ctxts
+                else:
+                    num_ptxts, dest_idx = num_ptxts + 1, num_ptxts
+                
+                aliases[dest] = f'{prep_dest}[{dest_idx}]'
             case VecBlendInstr(dest, vals, masks):
                 all_masks |= {'"' + ''.join(map(str, mask)) + '"' for mask in masks}
-                args = [f'{{{reg2var(val)}, masks["{"".join(map(str, mask))}"]}}' for val, mask in zip(vals, masks)]
-                cpp += [
-                    f'ctxt_bit {reg2var(dest)} = blend({{{", ".join(args)}}});'
+                args = [f'{{{reg2var(val)}, data.masks["{"".join(map(str, mask))}"]}}' for val, mask in zip(vals, masks)]
+                compute_lines += [
+                    f'ctxt_bit {reg2var(dest)} = blend_bits({{{", ".join(args)}}});'
                 ]
             case _:
                 raise TypeError(type(line))
-            
+        
+        if compute_lines and compute_lines[-1].startswith(('v', 'info.context')):
+            compute_lines.append(f'show({reg2var(dest)});')
 
-    prep_code += [f'masks["{mask}"] = make_mask(info, "{mask}");' for mask in all_masks]
+    prep_lines += [f'data.masks[{mask}] = make_mask(info, {mask});' for mask in all_masks]
     
-    return prep_code, cpp
+    prep_lines.append('return data;')
+    compute_lines.append(f'return {reg2var(f"__v{vout}")};')
+    
+    prep = "\n    ".join(prep_lines)
+    compute = "\n    ".join(compute_lines)
+    
+    return f"""
+#include <helib/FHE.h>
+
+#include "mux-common.hpp"
+
+#ifdef DEBUG
+#define show(x) _show(info, x, #x, {len(next(iter(all_masks)))})
+#else
+#define show(x)
+#endif
+
+void _show(EncInfo & info, ctxt_bit vec, std::string name, int size)
+{{
+    std::cout << name << ": ";
+    auto decrypted = decrypt_vector(info, vec);
+    for (int i = 0; i < size; i++) {{
+        std::cout << decrypted[i];
+    }}
+    std::cout << "\\n";
+}}
+
+std::vector<int> lanes()
+{{
+    return std::vector<int>{{{", ".join(map(str, output_lanes))}}};
+}}
+
+compute_data Prep(EncInfo & info, std::unordered_map<std::string, int> inputs)
+{{
+
+    compute_data data;
+    
+    {prep}
+}}
+
+ctxt_bit Compute(EncInfo & info, compute_data data)
+{{
+    {compute}
+}}
+    """
 
             
 
 
 def codegen_mux(circuit: num):
     compiler = CompilerV2()
-    for bit in circuit.bits:
-        compiler.compile(bit)
-    vectorized_code = vectorize(compiler)
-    return vectorized_code
+    outputs: list[int] = [cast(int, compiler.compile(bit).val) for bit in circuit.bits]
+    print('\n'.join(map(str, compiler.code)))
+    lanes, align = [], []
+    vectorized_code = vectorize(compiler, output_groups=[{*outputs}], lanes_out=lanes, align_out=align)
+    
+    vouts: set[int] = set()
+    for out in outputs:
+        vouts.add(align[out])
+    vout, = vouts # there should only be one output vector
+    
+    return vectorized_code, vout, [lanes[out] for out in outputs]
