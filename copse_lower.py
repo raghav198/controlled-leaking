@@ -39,7 +39,7 @@ def generate_copse_cpp(masks: list[list[int]], matrices: list[list[list[int]]], 
     cpp = f"""
 #include <copse/model-owner.hpp>
 
-#include "../kernel.hpp"
+#include "kernel.hpp"
 
 auto {name}_model() {{
     PtxtModelDescription model;

@@ -1,9 +1,10 @@
 from collections import defaultdict
+from math import ceil
 from typing import cast
 
 from coyote import coyote_ast
 from coyote.coyote_ast import CompilerV2
-from coyote.vectorize_circuit import vectorize
+from coyote.vectorize_circuit import vectorize, CodeObject
 from coyote.codegen import (VecBlendInstr, VecConstInstr, VecInstr,
                             VecLoadInstr, VecOpInstr, VecRotInstr)
 
@@ -46,7 +47,7 @@ def analyzeV2(lanes: list[int], schedule: list[int], outputs: set[int]):
 
 def compile_circuits(circuits: list[coyote_ast.Expression]):
     if not circuits:
-        return [], None, 0
+        return CodeObject(), None, 0
     # all the plain variables should be grouped
     group = {v.name for v in circuits if isinstance(v, coyote_ast.Var)}
     comp = CompilerV2(input_groups=[group]) if group else CompilerV2(input_groups=[])
@@ -60,20 +61,22 @@ def compile_circuits(circuits: list[coyote_ast.Expression]):
 
     assert len(force_lanes.keys()) == len(circuits)
 
-    lanes: list[int] = []
-    alignment: list[int] = []
-    code = vectorize(comp, extra_force_lanes=force_lanes, lanes_out=lanes, align_out=alignment, search_rounds=5)
+    result = vectorize(comp, extra_force_lanes=force_lanes, search_rounds=5)
+    
+    # code = result.code
+    # lanes = result.lanes
+    # alignment = result.alignment
 
-    outputs, liveness, width = analyzeV2(lanes, alignment, set(force_lanes.keys()))
+    outputs, liveness, width = analyzeV2(result.lanes, result.alignment, set(force_lanes.keys()))
     def mask(s): return [int(i in s) for i in range(width)]
     ret = next(iter(outputs))
 
     if len(outputs) > 1:
-        code.append(VecBlendInstr(f'__v{max(outputs) + 1}', [f'__v{out}' for out in outputs], [mask(liveness[out]) for out in outputs]))
+        result.instructions.append(VecBlendInstr(f'__v{max(outputs) + 1}', [f'__v{out}' for out in outputs], [mask(liveness[out]) for out in outputs]))
         ret = max(outputs) + 1
     liveness[max(outputs) + 1] = set().union(*(liveness[o] for o in outputs))
 
-    return code, ret, len(circuits)
+    return result, ret, len(circuits)
 
 
 def compile_array_circuits(circuits: list[list[coyote_ast.Expression]]):
@@ -98,29 +101,31 @@ def compile_array_circuits(circuits: list[list[coyote_ast.Expression]]):
 
     # input('\n'.join(map(str, comp.code)))
 
-    lanes: list[int] = []
-    alignment: list[int] = []
-    code = vectorize(comp, extra_force_lanes=force_lanes, lanes_out=lanes, align_out=alignment,
-                     output_groups=list(map(set, array_idx_outputs.values())), search_rounds=200)
+    code = vectorize(comp, extra_force_lanes=force_lanes,
+                     output_groups=list(map(set, array_idx_outputs.values())), search_rounds=5)
+    
+    # code = result.code
+    # lanes = result.lanes
+    # alignment = result.alignment
     
     rets: list[int] = []
     widths = []
 
-    max_reg = max(alignment)
+    max_reg = max(code.alignment)
 
     for idx in array_idx_outputs:
-        outputs, liveness, width = analyzeV2(lanes, alignment, set(array_idx_outputs[idx]))
+        outputs, liveness, width = analyzeV2(code.lanes, code.alignment, set(array_idx_outputs[idx]))
         print(f'array[{idx}] on schedule slot(s) {outputs}')
         widths.append(width)
         def mask(s): return [int(i in s) for i in range(width)]
         # ret = next(iter(outputs))
         if len(outputs) > 1:
-            code.append(VecBlendInstr(f'__v{max_reg + 1}', [f'__v{out}' for out in outputs], [mask(liveness[out]) for out in outputs]))
+            code.instructions.append(VecBlendInstr(f'__v{max_reg + 1}', [f'__v{out}' for out in outputs], [mask(liveness[out]) for out in outputs]))
         else:
-            code.append(VecLoadInstr(f'__v{max_reg + 1}', f'__v{next(iter(outputs))}'))
+            code.instructions.append(VecLoadInstr(f'__v{max_reg + 1}', f'__v{next(iter(outputs))}'))
         rets.append(max_reg + 1)
         max_reg += 1
-    input('\n'.join(map(str, code)))
+        
     return code, rets, len(circuits)
 
 
@@ -156,7 +161,7 @@ def vectorize_labels(tree: ChallahTree):
 
 
 
-def generate_coyote_cpp(code, aliases: dict[str, str]={}):
+def generate_coyote_cpp(code: CodeObject, aliases: dict[str, str]={}):
     op2func: dict[str, str] = {'+': 'add', '*': 'mul', '-': 'sub'}
     
     def reg2var(reg: str) -> str:
@@ -165,7 +170,7 @@ def generate_coyote_cpp(code, aliases: dict[str, str]={}):
         return reg[2:]
     
     generated_code: list[str] = []
-    for line in code:
+    for line in code.instructions:
         match line:
             case VecRotInstr(dest, operand, shift):
                 generated_code.append(f'auto {reg2var(dest)} = rotate({reg2var(operand)}, {shift});')
@@ -181,7 +186,7 @@ def generate_coyote_cpp(code, aliases: dict[str, str]={}):
     return generated_code
 
 
-def generate_coyote_kernel(code: list[VecInstr], name: str, width: int, output: list[str]):
+def generate_coyote_kernel(code: CodeObject, name: str, width: int, output: list[str]):
 
     def reg2var(reg: str) -> str:
         if reg in input_wire_mapping:
@@ -190,16 +195,22 @@ def generate_coyote_kernel(code: list[VecInstr], name: str, width: int, output: 
             return aliases[reg]
         return reg[2:]
 
+    positive_pads = max(0, ceil(code.max_rotation / code.vector_width))
+    negative_pads = max(0, -ceil(code.min_rotation / code.vector_width))
+    
+    if not name.endswith('Labels'): # Left and Right kernels need an extra negative pad to prepare for COPSE
+        negative_pads += 1
+
     input_wire_mapping: dict[str, int] = {}  # register -> input wire number
     aliases: dict[str, str] = {}  # variable before inlining -> variable after inlining
 
     input_wire_loading: list[str] = []
     masks = set()
-    for line in code:
+    for line in code.instructions:
         if isinstance(line, VecConstInstr):
             ptxt_vec = [f'inputs["{val}"]' if not val.isnumeric() else val for val in line.vals]
             input_wire_loading.append(f'ptxt {reg2var(line.dest)}{{{", ".join(ptxt_vec)}}};')
-            input_wire_loading.append(f'input_wires.push_back(encrypt(info, {reg2var(line.dest)}));')
+            input_wire_loading.append(f'input_wires.push_back(encrypt(info, {reg2var(line.dest)}, positive_pads, negative_pads));')
             input_wire_mapping[line.dest] = len(input_wire_mapping)
         elif isinstance(line, VecBlendInstr):
             masks |= {'"' + ''.join(map(str, mask)) + '"' for mask in line.masks}
@@ -217,10 +228,14 @@ def generate_coyote_kernel(code: list[VecInstr], name: str, width: int, output: 
     kernel_code = '\n        '.join(generated_code)
 
     cpp = f"""
-#include "../kernel.hpp"
+#include "kernel.hpp"
 {name}::{name}(EncInfo& info) : CoyoteKernel(info, {width}) {{}}
 
 void {name}::Prepare(std::unordered_map<std::string, int> inputs) {{
+    
+    int positive_pads = {positive_pads};
+    int negative_pads = {negative_pads};
+    
     {input_wire_loading_code}
 }}
 
