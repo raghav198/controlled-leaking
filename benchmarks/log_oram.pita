@@ -1,0 +1,25 @@
+let halfhelper = \(x, i) => {
+    if (x < (i * 2)) {
+        (i - 1)
+    } else {
+        halfhelper(x, (i+1))
+    }
+} in
+let half = \(x) => {
+    halfhelper(x, 0)
+} in
+let lookup = \(array, start, end, index) => {
+    if (start == (end - 1)) {
+        @array[start]
+    } else {
+        let mid = (start + half((end - start))) in
+        if (index < mid) {
+            lookup(array, start, mid, index)
+        } else {
+            lookup(array, mid, end, index)
+        }
+    }
+} in
+let array = &[0:15] in
+let idx = &16 in 
+lookup(array, 0, 16, idx)

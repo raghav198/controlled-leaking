@@ -1,0 +1,13 @@
+let auction = \(bids, cur, len, id1, id2) => {
+    if (cur == len) {
+        [id1; @bids[id2]]
+    } else {
+        if (@bids[id1] < @bids[cur]) {
+            auction(bids, (cur+1), len, cur, id1)
+        } else {
+            auction(bids, (cur+1), len, id1, id2)
+        }
+    }
+} in
+let bids = &[0:7] in
+auction(bids, 0, 8, 0, 0)

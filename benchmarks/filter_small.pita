@@ -1,0 +1,14 @@
+let predicate = \(val, threshold) => {
+    if (val < threshold) { 0 } else { val }
+} in
+let filter = \(arr, cur, len, threshold) => {
+    if (cur == len) {
+        arr
+    } else {
+        update arr { cur := predicate(@arr[cur], threshold) } in
+        filter(arr, (cur+1), len, threshold)
+    }
+} in
+let arr = &[0:2] in
+let thresh = &3 in
+filter(arr, 0, 3, thresh)

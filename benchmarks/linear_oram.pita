@@ -1,0 +1,14 @@
+let lookup = \(arr, start, end, index) => {
+    if (start == end) {
+        0
+    } else {
+        if (start == index) {
+            @arr[start]
+        } else {
+            lookup(arr, (start+1), end, index)
+        }
+    }
+} in 
+let array = &[0:15] in
+let idx = &16 in
+lookup(array, 0, 16, idx)

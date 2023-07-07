@@ -1,0 +1,15 @@
+let lookup = \(keys, values, start, size, key) => {
+    if (start == size) {
+        0
+    } else {
+        if (@keys[start] == key) {
+            @values[start]
+        } else {
+            lookup(keys, values, (start+1), size, key)
+        }
+    }
+} in
+let keys = &[0:7] in
+let values = &[8:15] in
+let key = &16 in
+lookup(keys, values, 0, 8, key)
