@@ -86,8 +86,8 @@ ctxt_vec encrypt_vector(const EncInfo &, ptxt_vec, int positive_pads = 1, int ne
 ptxt_vec decrypt_vector(const EncInfo &, ctxt_vec);
 zzx_vec encode_vector(const EncInfo &, ptxt_vec, int positive_pads = 1, int negative_pads = 1);
 ptxt_vec decode_vector(const EncInfo &, zzx_vec);
-ctxt_mat encrypt_matrix(const EncInfo &, ptxt_mat);
-zzx_mat encode_matrix(const EncInfo &, ptxt_mat);
+ctxt_mat encrypt_matrix(const EncInfo &, ptxt_mat, int positive_pads = 1, int negative_pads = 1);
+zzx_mat encode_matrix(const EncInfo &, ptxt_mat, int positive_pads = 1, int negative_pads = 1);
 std::vector<zzx_vec> generate_rotations(zzx_vec, int, const helib::EncryptedArray&);
 std::vector<ctxt_vec> generate_rotations(ctxt_vec, int, const helib::EncryptedArray&);
 

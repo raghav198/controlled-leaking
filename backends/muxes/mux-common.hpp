@@ -10,8 +10,9 @@ struct compute_data {
     std::unordered_map<std::string, zzx_vec> masks;
 };
 
+std::vector<std::vector<int>> lanes();
 compute_data Prep(EncInfo & info, std::unordered_map<std::string, int> inputs);
-ctxt_bit Compute(EncInfo & info, compute_data data);
+std::vector<ctxt_bit> Compute(EncInfo & info, compute_data data);
 
 
 #endif

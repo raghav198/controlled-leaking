@@ -61,6 +61,7 @@ int main(int argc, char * argv[])
     std::cout << "Setting up encryption..." << std::flush;
     
     EncInfo info(8191, 2, 1, 500, 2);
+    // EncInfo info(55831, 2, 1, 1000, 2);
 
     std::cout << info.nslots << "slots\n";
  
@@ -69,12 +70,27 @@ int main(int argc, char * argv[])
 #endif
 
     input_handler inp;
-    // inp.add_arr({2, 10, 11, 6, 8, 9, 4}); // the list
-    // inp.add_num(7); // threshold below which stuff gets zeroed out
+    
+    // // linear_oram, log_oram
+    // inp.add_arr({9, 2, 3, 12, 6, 8, 7, 1, 4, 5, 0, 10, 21, 16, 30, 13}); // array
+    // inp.add_num(6); // index
 
-    inp.add_arr({2, 4, 3, 1, 5, 6, 8, 6, 7, 9});
-    inp.add_num(3);
-    inp.add_num(2);
+    // // filter
+    // inp.add_arr({14, 15, 9, 13, 6, 16, 19, 10}); // array
+    // inp.add_num(11); // threshold
+
+    // // merge
+    // inp.add_arr({7, 12, 17, 18, 20}); // array 1
+    // inp.add_arr({3, 5, 11, 14, 19}); // array 2
+
+    // // sp_auction
+    // inp.add_arr({13, 6, 11, 8, 3, 7, 17, 12}); // bids
+
+    // // associative_array
+    // inp.add_arr({2, 14, 4, 9, 3, 19, 15, 1}); // keys
+    // inp.add_arr({2, 7, 12, 8, 13, 15, 5, 15}); // values
+    // inp.add_num(4); // lookup
+
 
     ctxt_bit scratch = encrypt_vector(info, std::vector<long>());
 
@@ -126,8 +142,8 @@ int main(int argc, char * argv[])
     eq += op;
     eq += NTL::ZZ(1);
 
-    auto lt_mask_ptxt = make_mask(info, maurice.lt_mask());
-    auto eq_mask_ptxt = make_mask(info, maurice.eq_mask());
+    auto lt_mask_ptxt = make_mask(info, maurice.lt_mask(), 0, 1);
+    auto eq_mask_ptxt = make_mask(info, maurice.eq_mask(), 0, 1);
 
     lt *= lt_mask_ptxt;
     eq *= eq_mask_ptxt;

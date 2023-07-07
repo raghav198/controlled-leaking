@@ -11,7 +11,7 @@ void COILRightKernel::Prepare(std::unordered_map<std::string, int> inputs) {
         input_wires.push_back(encrypt(info, t2));
         ptxt t3{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, inputs["input#11"], inputs["input#11"], inputs["input#11"], inputs["input#11"], inputs["input#11"], inputs["input#11"], inputs["input#11"], inputs["input#11"], inputs["input#11"], inputs["input#11"]};
         input_wires.push_back(encrypt(info, t3));
-        add_masks({"000000000000000000000000000000000000000000000000000000001111111111", "111111111111111111111111111111111111111111111111111111110000000000"});
+        add_masks({"111111111111111111111111111111111111111111111111111111110000000000", "000000000000000000000000000000000000000000000000000000001111111111"});
 }
 
 void COILRightKernel::Compute() {

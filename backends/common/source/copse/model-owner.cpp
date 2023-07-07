@@ -27,17 +27,17 @@ CtxtModelDescription *ModelOwner::encrypt(PtxtModelDescription ptxt)
 
     auto bitvecs = decompose_bits(ptxt.thresholds, ptxt.bits);
     for (int i = 0; i < ptxt.bits; i++)
-        ctxt->thresholds.push_back(get_vector(info, bitvecs[i]));
+        ctxt->thresholds.push_back(get_vector(info, bitvecs[i], 0, 1));
 
-    ctxt->d2b = ctxt->width == 0 ? std::vector<model_vec>{} : get_matrix(info, ptxt.d2b);
+    ctxt->d2b = ctxt->width == 0 ? std::vector<model_vec>{} : get_matrix(info, ptxt.d2b, 0, 1);
     ctxt->level_b2s.reserve(ptxt.level_b2s.size());
     ctxt->level_mask.reserve(ptxt.level_mask.size());
 
     for (auto bts : ptxt.level_b2s)
-        ctxt->level_b2s.push_back(get_matrix(info, bts));
+        ctxt->level_b2s.push_back(get_matrix(info, bts, 0, 1));
 
     for (auto mask : ptxt.level_mask)
-        ctxt->level_mask.push_back(get_vector(info, mask));
+        ctxt->level_mask.push_back(get_vector(info, mask, 0, 1));
 
     return ctxt;
 }

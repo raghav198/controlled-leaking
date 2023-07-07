@@ -103,12 +103,12 @@ ptxt_vec decrypt_vector(const EncInfo &info, ctxt_vec ctxt)
 
 // turn a matrix of 'long' into a vector of ciphertexts, each representing a
 // generalized diagonal
-ctxt_mat encrypt_matrix(const EncInfo &info, ptxt_mat ptxt)
+ctxt_mat encrypt_matrix(const EncInfo &info, ptxt_mat ptxt, int positive_pads, int negative_pads)
 {
     ctxt_mat mat;
     ptxt_mat diagonalized = get_diagonals(ptxt);
     for (auto vec : diagonalized) {
-        mat.push_back(encrypt_vector(info, vec));
+        mat.push_back(encrypt_vector(info, vec, positive_pads, negative_pads));
     }
         
     return mat;
@@ -133,11 +133,11 @@ ptxt_vec decode_vector(const EncInfo &info, zzx_vec vec)
 }
 
 // Encode a matrix into the plaintext space
-zzx_mat encode_matrix(const EncInfo &info, ptxt_mat mat)
+zzx_mat encode_matrix(const EncInfo &info, ptxt_mat mat, int positive_pads, int negative_pads)
 {
     zzx_mat pp;
     for (auto diag : get_diagonals(mat)) {
-        pp.push_back(encode_vector(info, diag));
+        pp.push_back(encode_vector(info, diag, positive_pads, negative_pads));
     }
         
     return pp;

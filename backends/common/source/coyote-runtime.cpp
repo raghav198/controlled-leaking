@@ -94,11 +94,11 @@ ctxt_bit blend_bits(std::initializer_list<std::pair<ctxt_bit, helib::Ptxt<helib:
     return result;
 }
 
-ctxt encrypt(EncInfo& info, ptxt n) {
+ctxt encrypt(EncInfo& info, ptxt n, int positive_pads, int negative_pads) {
     auto bits = decompose_bits(n, bitwidth);
     ctxt output;
     for (auto bit : bits) {
-        output.push_back(encrypt_vector(info, bit));
+        output.push_back(encrypt_vector(info, bit, positive_pads, negative_pads));
     }
     return output;
 }
