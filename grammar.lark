@@ -20,5 +20,7 @@ index_expr: "@" num_expr "[" single_num_expr "]"
 single_array_update: single_num_expr ":=" single_num_expr
 array_update: "update" var "{" _list_of{single_array_update, ","} "}" "in" num_expr
 single_num_expr: cond | let | array_update | arith | ctxt | func_call | var | index_expr | /[0-9]+/
-num_expr: single_num_expr | "[" _list_of{single_num_expr, ";"} "]"
+ctxt_array: "&" "[" /[0-9]+/ ":" /[0-9]+/ "]"
+new_array: "new" "[" /[0-9]+/ "]"
+num_expr: single_num_expr | ctxt_array | new_array | "[" _list_of{single_num_expr, ";"} "]"
 expr: func_def | num_expr

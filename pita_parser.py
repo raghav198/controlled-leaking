@@ -9,7 +9,9 @@ expr = pp.Forward()
 func_def = pp.Forward()
 op = pp.Literal('+') | '-' | '*'
 literal_num = pp.Word(pp.nums)
-ctxt_input = pp.Literal('&') + literal_num # eventually make this be party-specific as well
+ctxt_literal = pp.Literal('&') + literal_num # eventually make this be party-specific as well
+ctxt_array = pp.Literal('&') + '[' + literal_num + ':' + literal_num + ']'
+new_array = pp.Literal('new') + '[' + literal_num + ']'
 arith = '(' + num_expr + op + num_expr + ')'
 let = pp.Literal('let') + var + '=' + expr + 'in' + num_expr
 cond_op = pp.Literal('<') | '=='
@@ -22,8 +24,8 @@ index_expr = (pp.Suppress('@') + num_expr + '[' + single_num_expr + ']')
 single_array_update = (single_num_expr + pp.Suppress(':=') + single_num_expr).set_parse_action(tuple)
 array_update = pp.Literal('update') + var + '{' + pp.Group(pp.delimited_list(single_array_update, ',')) + '}' + 'in' + num_expr
 
-single_num_expr <<= cond | let | array_update | arith | ctxt_input | func_call | var | index_expr | literal_num
-num_expr <<= single_num_expr | (pp.Suppress('[') + pp.Group(pp.delimited_list(single_num_expr, ';')) + pp.Suppress(']')).set_parse_action(lambda n: pita.PitaArrayExpr(list(n[0])))
+single_num_expr <<= cond | let | array_update | arith | ctxt_literal | func_call | var | index_expr | literal_num
+num_expr <<= new_array | single_num_expr | ctxt_array | (pp.Suppress('[') + pp.Group(pp.delimited_list(single_num_expr, ';')) + pp.Suppress(']')).set_parse_action(lambda n: pita.PitaArrayExpr(list(n[0])))
 expr <<= func_def | num_expr
 
 def IndexAction(n):
@@ -34,6 +36,15 @@ def VarAction(n):
 
 def CtxtAction(n):
     return pita.PitaVarExpr(f'input#{n[1]}')
+
+def CtxtArrayAction(n):
+    start = int(n[2].name)
+    end = int(n[4].name)
+    ctxts: list[pita.PitaSingleNumExpr] = [pita.PitaVarExpr(f'input#{i}') for i in range(start, end + 1)]
+    return pita.PitaArrayExpr(ctxts)
+
+def NewArrayAction(n):
+    return pita.PitaArrayExpr([pita.PitaVarExpr('0') for _ in range(int(n[2].name))])
 
 def ArithAction(n):
     return pita.PitaArithExpr(n[1], n[2], n[3])
@@ -54,7 +65,9 @@ def FuncCallAction(n):
     return pita.PitaFuncCallExpr(n[0].name, list(n[2]))
 
 var.set_parse_action(VarAction)
-ctxt_input.set_parse_action(CtxtAction)
+ctxt_literal.set_parse_action(CtxtAction)
+ctxt_array.set_parse_action(CtxtArrayAction)
+new_array.set_parse_action(NewArrayAction)
 index_expr.set_parse_action(IndexAction)
 literal_num.set_parse_action(VarAction)
 let.set_parse_action(LetAction)
