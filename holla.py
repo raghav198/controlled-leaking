@@ -385,10 +385,10 @@ def interpret(expr: PitaExpr, ctx_vars: dict[str, PitaNumExpr] = {}, ctx_funcs: 
             assert isinstance(left_val, PitaSingleNumExpr)
             assert isinstance(right_val, PitaSingleNumExpr)
             if available(left_val) and available(right_val):
-                # print('...inlining...')
                 if (lt and get(left_val) < get(right_val)) or (not lt and get(left_val) == get(right_val)):
                     return interpret(true, ctx_vars, ctx_funcs)
                 return interpret(false, ctx_vars, ctx_funcs)
+            # print(f'new condition {left_val} {"<" if lt else "=="} {right_val}')
             return PitaCondExpr(left_val, lt, right_val, interpret(true, ctx_vars, ctx_funcs), interpret(false, ctx_vars, ctx_funcs))
         case PitaIndexExpr(arr, index):
             # print(f'index {arr}[{index}] ({ctx_vars})')
@@ -400,10 +400,15 @@ def interpret(expr: PitaExpr, ctx_vars: dict[str, PitaNumExpr] = {}, ctx_funcs: 
         case PitaFuncCallExpr(name, params):
             assert name in ctx_funcs
             func = ctx_funcs[name]
+            assert len(func.args) == len(params), f'Function `{name}` called with the wrong number of parameters (expected {len(func.args)}, got {len(params)})'
             # print(f'old params: {params}')
             params = [interpret(param, ctx_vars, ctx_funcs) for param in params]
-            # print(f'interpreted params: {params}')
-            return beta_reduce(func.args, func.body, params, ctx_vars, ctx_funcs)
+            # if name == 'lookup':
+            #     input(f'interpreted params: {params[1:]}')
+            try:
+                return beta_reduce(func.args, func.body, params, ctx_vars, ctx_funcs)
+            except RecursionError:
+                assert False, f'Could not prove that function `{name}` terminates with a ciphertext argument!'
         case PitaArrayExpr(elems):
             # doing this for mypy
             new_elems: list[PitaSingleNumExpr] = []
@@ -436,7 +441,11 @@ passes = [interpret, treeify_expr, comparison_folding, lambda t: t.normalize()]
 def compile(prog) -> ChallahTree:
     # print(prog)
     for p in passes:
-        prog = p(prog)
+        try:
+            prog = p(prog)
+        except AssertionError as e:
+            print(e)
+            quit()
         # print(p.__name__)
         # print(prog)
         # input()
