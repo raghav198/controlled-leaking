@@ -5,9 +5,10 @@ from typing import Callable, ClassVar, cast
 
 from coyote import coyote_ast
 from coyote.codegen import (VecBlendInstr, VecConstInstr, VecInstr,
-                            VecLoadInstr, VecOpInstr, VecRotInstr)
+                            VecLoadInstr, VecOpInstr, VecRotInstr, Instr)
 from coyote.coyote_ast import CompilerV2
 from coyote.vectorize_circuit import vectorize
+from coyote_lower import analyzeV2
 
 from holla import (ChallahArithExpr, ChallahArray, ChallahBranch, ChallahLeaf,
                    ChallahTree, ChallahVar)
@@ -19,7 +20,7 @@ bit = coyote_ast.Expression
 class num:
     """Bits of a number represented least significant bit first (e.g. `12` as a four bit number is `0011`)"""
     
-    bitwidth: ClassVar[int] = 2
+    bitwidth: ClassVar[int] = 8
     
     bits: list[bit]
 
@@ -170,7 +171,7 @@ def to_mux_network(tree: ChallahTree) -> num | num_array:
             raise TypeError(type(tree))
 
 
-def to_cpp(code: list[VecInstr], vout: int, output_lanes: list[int]):
+def to_cpp(code: list[VecInstr], vouts: list[int], output_lanes: list[list[int]]):
 
     def reg2var(reg: str) -> str:
         if reg in aliases:
@@ -198,7 +199,7 @@ def to_cpp(code: list[VecInstr], vout: int, output_lanes: list[int]):
                 ]
                 
             case VecOpInstr(dest, op, lhs, rhs):
-                rotations[reg2var(dest)] = rotations[reg2var(lhs)] + rotations[reg2var(rhs)]
+                rotations[reg2var(dest)] = max(rotations[reg2var(lhs)], rotations[reg2var(rhs)])
                 
                 if op == '-':
                     op = '+'
@@ -253,15 +254,21 @@ def to_cpp(code: list[VecInstr], vout: int, output_lanes: list[int]):
         if compute_lines and compute_lines[-1].startswith(('v', 'info.context')):
             compute_lines.append(f'show({reg2var(dest)});')
 
-    prep_lines += [f'data.masks[{mask}] = make_mask(info, {mask});' for mask in all_masks]
+    prep_lines += [f'data.masks[{mask}] = make_mask(info, {mask}, pad_count, 1);' for mask in all_masks]
     
     prep_lines.append('return data;')
-    compute_lines.append(f'return {reg2var(f"__v{vout}")};')
+    values = ", ".join([reg2var(f'__v{vout}') for vout in vouts])
+    compute_lines.append(f'return std::vector<ctxt_bit>{{ {values} }};')
+    # compute_lines.append(f'return {reg2var(f"__v{vout}")};')
+    output_lane_vectors = [f"{{{', '.join(map(str, arr_output_lanes))}}}" for arr_output_lanes in output_lanes]
     
     prep = "\n    ".join(prep_lines)
     compute = "\n    ".join(compute_lines)
     
     width = len(next(iter(all_masks)))
+    print(next(iter(all_masks)))
+    
+    print(f'rotations: {rotations}')
     
     return f"""
 #include <helib/FHE.h>
@@ -269,7 +276,7 @@ def to_cpp(code: list[VecInstr], vout: int, output_lanes: list[int]):
 #include "mux-common.hpp"
 
 #ifdef DEBUG
-#define show(x) _show(info, x, #x, {width})
+#define show(x) _show(info, x, #x, {width - 2})
 #else
 #define show(x)
 #endif
@@ -284,9 +291,9 @@ void _show(EncInfo & info, ctxt_bit vec, std::string name, int size)
     std::cout << "\\n";
 }}
 
-std::vector<int> lanes()
+std::vector<std::vector<int>> lanes()
 {{
-    return std::vector<int>{{{", ".join(map(str, output_lanes))}}};
+    return std::vector<std::vector<int>>{{{", ".join(map(str, output_lane_vectors))}}};
 }}
 
 compute_data Prep(EncInfo & info, std::unordered_map<std::string, int> inputs)
@@ -298,7 +305,7 @@ compute_data Prep(EncInfo & info, std::unordered_map<std::string, int> inputs)
     {prep}
 }}
 
-ctxt_bit Compute(EncInfo & info, compute_data data)
+std::vector<ctxt_bit> Compute(EncInfo & info, compute_data data)
 {{
     {compute}
 }}
@@ -318,6 +325,7 @@ def fixpoint(f):
         
     return inner
 
+# TODO: check if you're looking at an address already optimized
 @fixpoint
 def optimize_circuit(circuit: bit) -> bit:
     match circuit:
@@ -337,16 +345,89 @@ def optimize_circuit(circuit: bit) -> bit:
     raise TypeError(type(circuit))
 
 
-def codegen_mux(circuit: num):
+def codegen_scalar(circuit: num):
     compiler = CompilerV2()
     outputs: list[int] = [cast(int, compiler.compile(bit).val) for bit in circuit.bits]
-    # print('\n'.join(map(str, compiler.code)))
-    lanes, align = [], []
-    vectorized_code = vectorize(compiler, output_groups=[{*outputs}], lanes_out=lanes, align_out=align)
     
-    vouts: set[int] = set()
-    for out in outputs:
-        vouts.add(align[out])
-    vout, = vouts # there should only be one output vector
+    aliases: dict[int, str] = {}
     
-    return vectorized_code, vout, [lanes[out] for out in outputs]
+    def reg2var(reg: int) -> str:
+        if reg in aliases:
+            return aliases[reg]
+        return f'r{reg}'
+    
+    constant_loading = []
+    cpp_lines = []
+    num_ptxts: int = 0
+    num_ctxts: int = 0
+    
+    for instr in compiler.code:
+        if instr.op == '~':
+            assert instr.lhs == instr.rhs # sanity check
+            if instr.lhs.reg:
+                aliases[cast(int, instr.dest.val)] = reg2var(cast(int, instr.lhs.val))
+            else:
+                assert isinstance(instr.lhs.val, str)
+                if instr.lhs.val.isnumeric():
+                    constant_loading += [
+                        f'data.plaintexts.push_back(encode_vector(info, {instr.lhs.val}, 0, 0));'
+                    ]
+                    aliases[cast(int, instr.dest.val)] = f'data.plaintexts[{num_ptxts}]'
+                    num_ptxts += 1
+                else:
+                    constant_loading += [
+                        f'data.ciphertexts.push_back(encrypt_vector(info, inputs["{instr.lhs.val}"], 0, 0));'
+                    ]
+                    aliases[cast(int, instr.dest.val)] = f'data.ciphertexts[{num_ctxts}]'
+                    num_ctxts += 1
+        elif instr.op == '*':
+            cpp_lines += [
+                f'ctxt_bit {reg2var(cast(int, instr.dest.val))} = {reg2var(cast(int, instr.lhs.val))};'
+            ]
+        elif instr.op == '+':
+            pass
+            
+
+
+def codegen_mux(circuits: num_array, scalar=False):
+    compiler = CompilerV2()
+    outputs: list[list[int]] = [[cast(int, compiler.compile(bit).val) for bit in circuit.bits] for circuit in circuits.nums]
+
+    print(f'{len(compiler.code)} instructions')
+
+
+    result = vectorize(compiler, output_groups=[{*outs} for outs in outputs])
+    
+    
+    vectorized_code = result.instructions
+    lanes = result.lanes
+    align = result.alignment
+    
+    rets: list[int] = []
+    widths = []
+    max_reg = max(align)
+    
+    for outs in outputs:
+        vec_outputs, liveness, width = analyzeV2(lanes, align, {*outs})
+        widths.append(width)
+        def mask(s): return [int(i in s) for i in range(width)]
+        ret = next(iter(vec_outputs))
+
+        if len(vec_outputs) > 1:
+            vectorized_code.append(VecBlendInstr(f'__v{max_reg + 1}', [f'__v{out}' for out in vec_outputs], [mask(liveness[out]) for out in vec_outputs]))
+            # ret = max(vec_outputs) + 1
+        else:
+            vectorized_code.append(VecLoadInstr(f'__v{max_reg + 1}', f'{next(iter(vec_outputs))}'))
+        rets.append(max_reg + 1)
+        liveness[max_reg + 1] = set().union(*(liveness[o] for o in vec_outputs))
+        max_reg += 1
+            
+        
+
+    
+    # vouts: set[int] = set()
+    # for out in outputs:
+    #     vouts.add(align[out])
+    # vout, = vouts # there should only be one output vector
+    
+    return vectorized_code, rets, [[lanes[out] for out in outs] for outs in outputs], result

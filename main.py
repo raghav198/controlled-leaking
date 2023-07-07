@@ -6,7 +6,7 @@ from pyparsing import ParseException
 from copse_lower import generate_copse_cpp, generate_copse_data
 from coyote_lower import vectorize_decisions, vectorize_labels
 from holla import compile, pprint
-from mux_network import codegen_mux, num, optimize_circuit, to_cpp, to_mux_network
+from mux_network import codegen_mux, num, optimize_circuit, to_cpp, to_mux_network, num_array
 from pita_parser import expr
 from syntax_errors import report_syntax_errors
 
@@ -31,19 +31,24 @@ def coil_codegen(challah_tree, program_name, coil_root = 'backends/coil/coil_pro
 def mux_network_codegen(challah_tree, program_name, mux_root = 'backends/muxes'):
     network = to_mux_network(challah_tree)
     if isinstance(network, num):
-        for i, bit in enumerate(network.bits):
-            print(f'[{i}] {bit}')
-        print('Optimizing...')
         network.bits = [optimize_circuit(b) for b in network.bits]
-        for i, bit in enumerate(network.bits):
-            print(f'[{i}] {bit}')
-        vector_code, vout, lanes = codegen_mux(network)
-        code = to_cpp(vector_code, vout, lanes)
-        
-        open(f'{mux_root}/{program_name}.cpp', 'w').write(code)
-        
+        network_array = num_array(nums=[network])
     else:
-        print('[ERROR] Array codegen is not implemented yet!')
+        network_array = network
+        # for i, bit in enumerate(network.bits):
+        #     print(f'[{i}] {bit}')
+        # print('Optimizing...')
+        
+        # for i, bit in enumerate(network.bits):
+        #     print(f'[{i}] {bit}')
+    vector_code, vouts, lanes, result = codegen_mux(network_array)
+    
+    print('\n'.join(map(str, vector_code)))
+    open(f'mux_schedules/{program_name}', 'w').write(f'lanes: {result.lanes}\nalignment: {result.alignment}')
+    code = to_cpp(vector_code, vouts, lanes)
+    
+    open(f'{mux_root}/{program_name}.cpp', 'w').write(code)
+        
 
 
 def main(args):
