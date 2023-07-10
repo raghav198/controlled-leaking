@@ -249,7 +249,7 @@ def to_cpp(code: list[VecInstr], vouts: list[int], output_lanes: list[list[int]]
                     f'ctxt_bit {reg2var(dest)} = blend_bits({{{", ".join(args)}}});'
                 ]
             case _:
-                raise TypeError(type(line))
+                raise TypeError(line)
         
         if compute_lines and compute_lines[-1].startswith(('v', 'info.context')):
             compute_lines.append(f'show({reg2var(dest)});')
@@ -325,7 +325,18 @@ def fixpoint(f):
         
     return inner
 
-# TODO: check if you're looking at an address already optimized
+
+def id_cache(f: Callable[[bit], bit]):
+    cache: dict[int, bit] = {}
+    def inner(c: bit) -> bit:
+        if id(c) in cache:
+            return cache[id(c)]
+        value = f(c)
+        cache[id(c)] = value
+        return value
+    return inner
+
+@id_cache
 @fixpoint
 def optimize_circuit(circuit: bit) -> bit:
     match circuit:
@@ -343,7 +354,6 @@ def optimize_circuit(circuit: bit) -> bit:
                     return coyote_ast.Op(op, optimize_circuit(lhs), optimize_circuit(rhs))
 
     raise TypeError(type(circuit))
-
 
 def codegen_scalar(circuit: num):
     compiler = CompilerV2()

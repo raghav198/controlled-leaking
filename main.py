@@ -32,15 +32,12 @@ def mux_network_codegen(challah_tree, program_name, mux_root = 'backends/muxes')
     network = to_mux_network(challah_tree)
     if isinstance(network, num):
         network.bits = [optimize_circuit(b) for b in network.bits]
+        # for i, bit in enumerate(network.bits):
+        #     print(f'[{i}] {bit}')
         network_array = num_array(nums=[network])
     else:
         network_array = network
-        # for i, bit in enumerate(network.bits):
-        #     print(f'[{i}] {bit}')
-        # print('Optimizing...')
-        
-        # for i, bit in enumerate(network.bits):
-        #     print(f'[{i}] {bit}')
+
     vector_code, vouts, lanes, result = codegen_mux(network_array)
     
     print('\n'.join(map(str, vector_code)))
