@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
-set(TARGET "filter_small.mux")
+# set(TARGET "filter_small.mux")
 
 # set(COIL_PROGRAM "linear_oram")
 # set(MUX_PROGRAM "mux_test")
