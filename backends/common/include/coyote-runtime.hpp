@@ -6,6 +6,7 @@
 #include <helib/binaryArith.h>
 
 #include <vector>
+#include <cassert>
 
 using ctxt = std::vector<helib::Ctxt>;
 using ctxt_bit = helib::Ctxt;

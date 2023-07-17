@@ -6,6 +6,7 @@
 #include <helib/intraSlot.h>
 #include <iostream>
 #include <vector>
+#include <functional>
 #include <copse/vectrees.hpp>
 #include <copse/sally-server.hpp>
 
