@@ -2,6 +2,8 @@
 
 #include <initializer_list>
 #include <sstream>
+#include <iostream>
+#include <fstream>
 #include <string>
 #include <unordered_map>
 
@@ -37,4 +39,16 @@ struct input_handler {
         }
     }
 
+    void add_from_file(char *file) {
+        std::ifstream fin(file);
+        if (fin.is_open()) {
+            int val;
+            while (fin >> val) {
+                add_num(val);
+            }
+        } else {
+          std::cout << "Cannot read input file\n";
+          exit(1);
+        }
+    }
 };

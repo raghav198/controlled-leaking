@@ -5,6 +5,7 @@
 #include <helib/binaryCompare.h>
 #include <helib/intraSlot.h>
 #include <iostream>
+#include <string>
 #include <vector>
 #include <functional>
 #include <copse/vectrees.hpp>
@@ -70,8 +71,14 @@ int main(int argc, char * argv[])
     NTL::SetNumThreads(32);
 #endif
 
+    char *in_file = argc > 1 ? argv[1] : nullptr;
+    char *out_file = argc > 2 ? argv[2] : nullptr;
+
     input_handler inp;
-    
+    if (in_file) {
+        inp.add_from_file(in_file);
+    }
+
     // // linear_oram, log_oram
     // inp.add_arr({9, 2, 3, 12, 6, 8, 7, 1, 4, 5, 0, 10, 21, 16, 30, 13}); // array
     // inp.add_num(6); // index
@@ -261,12 +268,26 @@ int main(int argc, char * argv[])
 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
+    auto size = answer_enc_array.size();
+    std::vector<int> answer_array(size);
+    for (auto i = 0; i < size; i++) {
+         answer_array[i] = extract(info, answer_enc_array[i], label_kernel.width);
+    }
+
     std::cout << "Answer: [ ";
 
-    for (auto answer_enc : answer_enc_array) {
-        std::cout << extract(info, answer_enc, label_kernel.width) << " ";
+    for (auto answer : answer_array) {
+        std::cout << answer << " ";
     }
     std::cout << "] (" << duration.count() << "ms)\n";
+
+    if (out_file) {
+        std::ofstream fout(out_file);
+        for (auto answer : answer_array) {
+            fout << answer << "\n";
+        }
+    }
+
     std::cout << "Coyote time: " << std::chrono::duration_cast<std::chrono::milliseconds>(computed - start).count() << "ms\n";
 
     return 0;
