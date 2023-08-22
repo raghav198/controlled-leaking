@@ -6,7 +6,7 @@ from pyparsing import ParseException
 from copse_lower import generate_copse_cpp, generate_copse_data
 from coyote_lower import vectorize_decisions, vectorize_labels
 from holla import compile, pprint
-from mux_network import codegen_mux, num, optimize_circuit, to_cpp, to_mux_network, num_array
+from mux_network import add_depth, codegen_mux, codegen_scalar, mul_depth, num, optimize, optimize_circuit, to_cpp, to_mux_network, num_array, vec_depth
 from pita_parser import expr
 from syntax_errors import report_syntax_errors
 
@@ -31,7 +31,9 @@ def coil_codegen(challah_tree, program_name, coil_root = 'backends/coil/coil_pro
 def mux_network_codegen(challah_tree, program_name, mux_root = 'backends/muxes'):
     network = to_mux_network(challah_tree)
     if isinstance(network, num):
-        network.bits = [optimize_circuit(b) for b in network.bits]
+        network.bits = [optimize(b) for b in network.bits]
+        print([mul_depth(b) for b in network.bits])
+        print([add_depth(b) for b in network.bits])
         # for i, bit in enumerate(network.bits):
         #     print(f'[{i}] {bit}')
         network_array = num_array(nums=[network])
@@ -39,13 +41,37 @@ def mux_network_codegen(challah_tree, program_name, mux_root = 'backends/muxes')
         network_array = network
 
     vector_code, vouts, lanes, result = codegen_mux(network_array)
+    print(vec_depth(vector_code))
+    input()
     
-    print('\n'.join(map(str, vector_code)))
+    # print('\n'.join(map(str, vector_code)))
     open(f'mux_schedules/{program_name}', 'w').write(f'lanes: {result.lanes}\nalignment: {result.alignment}')
-    code = to_cpp(vector_code, vouts, lanes)
+    code = to_cpp(vector_code, vouts, lanes, result)
     
     open(f'{mux_root}/{program_name}.cpp', 'w').write(code)
         
+
+def scalar_codegen(challah_tree, program_name, scalar_root = 'backends/scalar'):
+    network = to_mux_network(challah_tree)
+    if isinstance(network, num):
+        # for i, bit in enumerate(network.bits):
+        #     print(f'[{i}] {bit}')
+        network.bits = [optimize(b) for b in network.bits]
+        print([mul_depth(b) for b in network.bits])
+        
+        for i, bit in enumerate(network.bits):
+            print(f'[{i}] {bit}')
+        network_array = num_array(nums=[network])
+    else:
+        network_array = num_array(nums=[num(bits=list(map(optimize, bit.bits))) for bit in network.nums])
+ 
+    code = codegen_scalar(network_array)
+    open(f'{scalar_root}/{program_name}.cpp', 'w').write(code)
+    
+    
+def cached_codegen(cache_path: str):
+    pass
+    
 
 
 def main(args):
@@ -66,6 +92,8 @@ def main(args):
 
     if args.backend == 'mux':
         mux_network_codegen(challah_tree, program_name)
+    elif args.backend == 'scalar':
+        scalar_codegen(challah_tree, program_name)
     else:
         coil_codegen(challah_tree, program_name)
 
@@ -74,7 +102,7 @@ if __name__ == '__main__':
 
     parser.add_argument('file')
 
-    parser.add_argument('-b', '--backend', type=str, choices=['mux', 'coil'], default='coil')
+    parser.add_argument('-b', '--backend', type=str, choices=['mux', 'coil', 'scalar'], default='coil')
     parser.add_argument('-s', '--show-tree', action='store_true', help='Show generated decision tree and exit')
 
     # parser.add_argument('-e', '--entropy', type=float, help='Maximum allowed information leakage (in bits)')

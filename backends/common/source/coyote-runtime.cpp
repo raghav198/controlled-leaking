@@ -95,6 +95,11 @@ ctxt_bit blend_bits(std::initializer_list<std::pair<ctxt_bit, helib::Ptxt<helib:
 }
 
 ctxt encrypt(EncInfo& info, ptxt n, int positive_pads, int negative_pads) {
+#ifdef DEBUG
+    std::cout << "Encrypting: ";
+    for (auto val : n) std::cout << val << " ";
+    std::cout << "\n";
+#endif
     auto bits = decompose_bits(n, bitwidth);
     ctxt output;
     for (auto bit : bits) {

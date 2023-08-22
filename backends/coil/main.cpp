@@ -6,6 +6,7 @@
 #include <helib/intraSlot.h>
 #include <iostream>
 #include <vector>
+#include <functional>
 #include <copse/vectrees.hpp>
 #include <copse/sally-server.hpp>
 
@@ -59,11 +60,15 @@ int main(int argc, char * argv[])
 {
     
     std::cout << "Setting up encryption..." << std::flush;
-    
+    // x.addConstant()
     EncInfo info(8191, 2, 1, 500, 2);
     // EncInfo info(55831, 2, 1, 1000, 2);
 
     std::cout << info.nslots << "slots\n";
+
+#ifdef DEBUG
+    std::cout << "Debug mode!\n";
+#endif
  
 #ifdef VECTREE_THREADED
     NTL::SetNumThreads(32);
@@ -74,6 +79,9 @@ int main(int argc, char * argv[])
     // // linear_oram, log_oram
     // inp.add_arr({9, 2, 3, 12, 6, 8, 7, 1, 4, 5, 0, 10, 21, 16, 30, 13}); // array
     // inp.add_num(6); // index
+
+    // inp.add_arr({1, 2, 3});
+    // inp.add_num(4);
 
     // // filter
     // inp.add_arr({14, 15, 9, 13, 6, 16, 19, 10}); // array
@@ -90,6 +98,16 @@ int main(int argc, char * argv[])
     // inp.add_arr({2, 14, 4, 9, 3, 19, 15, 1}); // keys
     // inp.add_arr({2, 7, 12, 8, 13, 15, 5, 15}); // values
     // inp.add_num(4); // lookup
+
+    // inp.add_arr({2, 5, 7, 8, 9, 13, 11, 6}); // array
+    // inp.add_num(2); // i
+    // inp.add_num(3); // j
+    // inp.add_num(0); // k1
+    // inp.add_num(1); // k2
+
+    // GCD
+    inp.add_num(21);
+    inp.add_num(28);
 
 
     ctxt_bit scratch = encrypt_vector(info, std::vector<long>());
@@ -117,6 +135,22 @@ int main(int argc, char * argv[])
     right_kernel.Compute();
     label_kernel.Compute();
 
+    auto left_values = left_kernel.output_wires[0];
+    auto right_values = right_kernel.output_wires[0];
+
+    // if (left_kernel.input_wires[0].size() != left_kernel.width) {
+        std::stringstream mask_string;
+        for (int i = 0; i < left_kernel.width; i++) {
+            mask_string << "1";
+        }
+
+        auto mask = make_mask(info, mask_string.str(), 0, 0);
+        left_values = blend({{left_values, mask}});
+        right_values = blend({{right_values, mask}});
+        left_values = add(left_values, rotate(left_values, left_kernel.width));
+        right_values = add(right_values, rotate(right_values, left_kernel.width));
+    // }
+
     auto computed = std::chrono::high_resolution_clock::now();
 
     if (left_kernel.output_wires.size() == 0) {
@@ -135,8 +169,8 @@ int main(int argc, char * argv[])
     ctxt_bit op(scratch);
 
     helib::compareTwoNumbers(op, lt, 
-        helib::CtPtrs_vectorCt(left_kernel.output_wires[0]), 
-        helib::CtPtrs_vectorCt(right_kernel.output_wires[0]), true);
+        helib::CtPtrs_vectorCt(left_values), 
+        helib::CtPtrs_vectorCt(right_values), true);
 
     ctxt_bit eq = lt;
     eq += op;
@@ -152,13 +186,13 @@ int main(int argc, char * argv[])
     decisions += eq;
 
 #ifdef DEBUG
-    for (auto i : left_kernel.get_output(0))
+    for (auto i : decrypt(info, left_values))
         std::cout << i << " ";
     std::cout << "\n";
 
     std::cout << "vs\n";
 
-    for (auto i : right_kernel.get_output(0))
+    for (auto i : decrypt(info, right_values))
         std::cout << i << " ";
     std::cout << "\n";
 

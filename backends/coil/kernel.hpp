@@ -41,7 +41,8 @@ struct CoyoteKernel {
 
     std::vector<int> get_output(int index) {
         ptxt_vec result = decrypt(info, output_wires[index]);
-        return std::vector<int>(result.begin(), result.begin() + width);
+        return std::vector<int>(result.begin(), result.end());
+        // return std::vector<int>(result.begin(), result.begin() + width);
     }
 };
 

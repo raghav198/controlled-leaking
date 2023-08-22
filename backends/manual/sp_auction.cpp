@@ -4,9 +4,9 @@
 
 #include "common.hpp"
 
-std::vector<ctxt> sp_auction_helper(std::vector<ctxt> bids, int index, ctxt top_idx, ctxt second_idx, ctxt top_bid, ctxt second_bid, EncInfo & info)
+std::vector<ctxt> sp_auction_helper(std::vector<ctxt> bids, int index, ctxt top_idx, ctxt second_idx, ctxt top_bid, ctxt second_bid, EncInfo & info, int & round)
 {
-    std::cout << "Checking bid id " << index << "\n";
+    std::cout << "Checking bid id " << index << " (round " << ++round << " of 511)\n";
     std::vector<ctxt> result;
     if (index == bids.size()) {
         result.push_back(top_idx);
@@ -24,8 +24,8 @@ std::vector<ctxt> sp_auction_helper(std::vector<ctxt> bids, int index, ctxt top_
     gt = lt;
     gt.addConstant(NTL::ZZX(1));
 
-    auto left = sp_auction_helper(bids, index + 1, encrypt(info, ptxt{index}), top_idx, bids[index], top_bid, info);
-    auto right = sp_auction_helper(bids, index + 1, top_idx, second_idx, top_bid, second_bid, info);
+    auto left = sp_auction_helper(bids, index + 1, encrypt(info, ptxt{index}), top_idx, bids[index], top_bid, info, round);
+    auto right = sp_auction_helper(bids, index + 1, top_idx, second_idx, top_bid, second_bid, info, round);
 
     // std::cout << "SP-auction with index " << index + 1 << " and top two bids " << decrypt(info, bids[index])[0] << ", " << decrypt(info, top_bid)[0] << ": " << decrypt(info, left[1])[0] << "\n";
     // std::cout << "SP-auction with index " << index + 1 << " and top two bids " << decrypt(info, top_bid)[0] << ", " << decrypt(info, second_bid)[0] << ": " << decrypt(info, right[1])[0] << "\n";
@@ -37,7 +37,8 @@ std::vector<ctxt> sp_auction_helper(std::vector<ctxt> bids, int index, ctxt top_
 
 std::vector<ctxt> sp_auction(std::vector<ctxt> bids, EncInfo & info)
 {
-    return sp_auction_helper(bids, 0, encrypt(info, ptxt{0}), encrypt(info, ptxt{0}), bids[0], bids[0], info);
+    int round = 0;
+    return sp_auction_helper(bids, 0, encrypt(info, ptxt{0}), encrypt(info, ptxt{0}), bids[0], bids[0], info, round);
 }
 
 int main()

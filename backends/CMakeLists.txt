@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
-set(TARGET "filter_small.mux")
+set(TARGET "recursive_gcd.coil")
 
 # set(COIL_PROGRAM "linear_oram")
 # set(MUX_PROGRAM "mux_test")
@@ -35,6 +35,11 @@ add_executable("${TARGET}" muxes/${BASENAME}.cpp muxes/mux-common.hpp muxes/main
     ${COMMON_SOURCES} ${COMMON_INCLUDES}
     ${COPSE_SOURCES} ${COPSE_INCLUDES})
 
+elseif(${TARGET} MATCHES ".scal$")
+get_filename_component(BASENAME ${TARGET} NAME_WE)
+add_executable(${TARGET} scalar/${BASENAME}.cpp scalar/main.cpp
+    ${COMMON_SOURCES} ${COMMON_INCLUDES}
+    ${COPSE_SOURCES} ${COPSE_INCLUDES})
 else()
 
 add_executable(${TARGET} manual/${TARGET}.cpp 

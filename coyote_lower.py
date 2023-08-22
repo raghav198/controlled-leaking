@@ -3,10 +3,10 @@ from math import ceil
 from typing import cast
 
 from coyote import coyote_ast
+from coyote.codegen import (Schedule, VecBlendInstr, VecConstInstr,
+                            VecLoadInstr, VecOpInstr, VecRotInstr, codegen)
 from coyote.coyote_ast import CompilerV2
-from coyote.vectorize_circuit import vectorize, CodeObject
-from coyote.codegen import (VecBlendInstr, VecConstInstr, VecInstr,
-                            VecLoadInstr, VecOpInstr, VecRotInstr)
+from coyote.vectorize_circuit import CodeObject, vectorize
 
 from holla import (ChallahArithExpr, ChallahArray, ChallahBranch, ChallahLeaf,
                    ChallahTree, ChallahVar)
@@ -45,6 +45,39 @@ def analyzeV2(lanes: list[int], schedule: list[int], outputs: set[int]):
     return list(vec_outputs), liveness, max(lanes) + 1
 
 
+def compile_circuits_stupid(circuits: list[coyote_ast.Expression]):
+    if not circuits:
+        return CodeObject(), None, 0
+    
+    compiler = CompilerV2()
+    
+    outputs = []
+    for expr in circuits:
+        if isinstance(expr, coyote_ast.Op):
+            outputs.append(compiler.compile(expr).val)
+        else:
+            outputs.append(compiler.compile(coyote_ast.Op('~', expr, expr)).val)
+
+    alignment: list[int] = list(range(len(compiler.code)))
+    lanes: list[int] = []
+    cur_lane = 0
+    for i in range(len(compiler.code)):
+        lanes.append(cur_lane)
+        if i in outputs: cur_lane += 1
+        
+    print('scalar:')
+    print('\n'.join(map(str, compiler.code)))
+    print(f'outputs: {outputs}')
+    print(f'alignment: {alignment}')
+    print(f'lanes: {lanes}')
+    # input()
+        
+    code = codegen(Schedule(lanes, alignment, compiler.code))
+    code.append(VecBlendInstr(f'__v{max(outputs) + 1}', [f'__v{out}' for out in outputs], [[int(i == j) for i in range(len(outputs))] for j in range(len(outputs))]))
+    print('\n'.join(map(str, code)))
+    # input()
+    return CodeObject(instructions=code, lanes=lanes, alignment=alignment, vector_width=len(outputs)), max(outputs) + 1, len(circuits)
+
 def compile_circuits(circuits: list[coyote_ast.Expression]):
     if not circuits:
         return CodeObject(), None, 0
@@ -61,7 +94,10 @@ def compile_circuits(circuits: list[coyote_ast.Expression]):
 
     assert len(force_lanes.keys()) == len(circuits)
 
-    result = vectorize(comp, extra_force_lanes=force_lanes, search_rounds=5)
+    input("\n".join(map(str, comp.code)))
+
+    result = vectorize(comp, extra_force_lanes=force_lanes, search_rounds=10)
+    input()
     
     # code = result.code
     # lanes = result.lanes
@@ -78,6 +114,49 @@ def compile_circuits(circuits: list[coyote_ast.Expression]):
 
     return result, ret, len(circuits)
 
+
+def compile_array_circuits_stupid(circuits: list[list[coyote_ast.Expression]]):
+    compiler = CompilerV2()
+    array_idx_outputs: dict[int, list[int]] = defaultdict(list)
+    all_outputs: list[int]
+    
+    for lane, arr in enumerate(circuits):
+        out_group: set[int] = set()
+        for idx, expr in enumerate(arr):
+            reg: int
+            if isinstance(expr, coyote_ast.Op):
+                reg = cast(int, compiler.compile(expr).val)
+            else:
+                reg = cast(int, compiler.compile(coyote_ast.Op('~', expr, expr)))
+                
+            array_idx_outputs[idx].append(reg)
+            out_group.add(reg)
+            
+
+    alignment: list[int] = list(range(len(compiler.code)))
+    lanes: list[int] = []
+    for idx in array_idx_outputs:
+        cur_lane = 0
+        for i in range(len(lanes), array_idx_outputs[idx][-1] + 1):
+            lanes.append(cur_lane)
+            if i in array_idx_outputs[idx]: cur_lane += 1
+            
+    code = codegen(Schedule(lanes, alignment, compiler.code))
+    next_ret = len(alignment)
+    rets: list[int] = []
+    for idx in array_idx_outputs:
+        outputs = array_idx_outputs[idx]
+        code.append(VecBlendInstr(f'__v{next_ret}', [f'__v{out}' for out in outputs], [[int(i == j) for i in range(len(outputs))] for j in range(len(outputs))]))
+        rets.append(next_ret)
+        next_ret += 1
+        
+    print('\n'.join(map(str, code)))
+    # input()
+        
+    return CodeObject(instructions=code, lanes=lane, alignment=alignment, vector_width=max(map(len, array_idx_outputs.values()))), rets, len(circuits)
+    
+    
+            
 
 def compile_array_circuits(circuits: list[list[coyote_ast.Expression]]):
     group = {v.name for c in circuits for v in c if isinstance(v, coyote_ast.Var)}
@@ -102,7 +181,7 @@ def compile_array_circuits(circuits: list[list[coyote_ast.Expression]]):
     # input('\n'.join(map(str, comp.code)))
 
     code = vectorize(comp, extra_force_lanes=force_lanes,
-                     output_groups=list(map(set, array_idx_outputs.values())), search_rounds=5)
+                     output_groups=list(map(set, array_idx_outputs.values())), search_rounds=10)
     
     # code = result.code
     # lanes = result.lanes

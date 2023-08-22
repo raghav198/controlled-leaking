@@ -40,9 +40,9 @@ ptxt_vec pad_vector(ptxt_vec vec, int positive_pads, int negative_pads, int nslo
 {
 
 #ifdef DEBUG
-    std::cout << "Before padding:\n";
-    for (auto val : vec) std::cout << val;
-    std::cout << "\n";
+    // std::cout << "Before padding:\n";
+    // for (auto val : vec) std::cout << val;
+    // std::cout << "\n";
 #endif
     int sz = vec.size();
     vec.resize(nslots);
@@ -62,9 +62,9 @@ ptxt_vec pad_vector(ptxt_vec vec, int positive_pads, int negative_pads, int nslo
     }
 
 #ifdef DEBUG
-    std::cout << "After padding (" << positive_pads << "; -" << negative_pads << ")\n";
-    for (auto val : vec) std::cout << val;
-    std::cout << "\n";
+    // std::cout << "After padding (" << positive_pads << "; -" << negative_pads << ")\n";
+    // for (auto val : vec) std::cout << val;
+    // std::cout << "\n";
 #endif 
 
 

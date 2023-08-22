@@ -9,7 +9,7 @@ from pita import (PitaArithExpr, PitaArrayExpr, PitaCondExpr, PitaExpr,
                   PitaLetExpr, PitaNumExpr, PitaSingleNumExpr, PitaUpdateExpr,
                   PitaVarExpr, pita_map, pita_num_map)
 from typecheck import is_ptxt
-from coyote.disjoint_set import DisjointSet
+from eq_neq import EqNeq
 
 
 def assert_compatible(left, right):
@@ -260,7 +260,7 @@ def substitute_all(expr: PitaExpr):
             return pita_num_map(expr, substitute_all)
 
 
-def comparison_folding(tree: ChallahTree, known: list[tuple[ChallahLeaf, ChallahLeaf]] = [], equalities: DisjointSet[ChallahLeaf] = DisjointSet()):
+def comparison_folding(tree: ChallahTree, known: list[tuple[ChallahLeaf, ChallahLeaf]] = [], equalities: EqNeq[ChallahLeaf] = EqNeq()):
     match tree:
         case ChallahBranch(left, lt, right, true, false):
             if lt:
@@ -271,18 +271,21 @@ def comparison_folding(tree: ChallahTree, known: list[tuple[ChallahLeaf, Challah
                 return ChallahBranch(left, lt, right, comparison_folding(true, known + [(left, right)], equalities), comparison_folding(false, known + [(right, left)], equalities))
             else:
                 if equalities.contains(left) and equalities.contains(right):
+                    if equalities.is_unequal(left, right):
+                        return comparison_folding(false, known, equalities)
                     if equalities.is_equivalent(left, right):
                         return comparison_folding(true, known, equalities)
-                    return comparison_folding(false, known, equalities)
                 
                 true_branch = equalities.copy()
                 if not true_branch.contains(left): true_branch.add(left)
                 if not true_branch.contains(right): true_branch.add(right)
                 
                 false_branch = true_branch.copy()
+                false_branch.require_neq(left, right)
                 true_branch.union(left, right)
                 return ChallahBranch(left, lt, right, comparison_folding(true, known, true_branch), comparison_folding(false, known, false_branch))
         case _:
+            # print(f'=> {tree} (known {list(equalities.all_classes())})')
             return tree
 
 
@@ -401,10 +404,8 @@ def interpret(expr: PitaExpr, ctx_vars: dict[str, PitaNumExpr] = {}, ctx_funcs: 
             assert name in ctx_funcs
             func = ctx_funcs[name]
             assert len(func.args) == len(params), f'Function `{name}` called with the wrong number of parameters (expected {len(func.args)}, got {len(params)})'
-            # print(f'old params: {params}')
             params = [interpret(param, ctx_vars, ctx_funcs) for param in params]
-            # if name == 'lookup':
-            #     input(f'interpreted params: {params[1:]}')
+            # print(f'trace: {name}{tuple(params)}')
             try:
                 return beta_reduce(func.args, func.body, params, ctx_vars, ctx_funcs)
             except RecursionError:
@@ -433,7 +434,7 @@ def interpret(expr: PitaExpr, ctx_vars: dict[str, PitaNumExpr] = {}, ctx_funcs: 
 
     raise TypeError(type(expr))
 
-
+# comparison_folding = lambda x: x
 # interpret_passes = [inline_all, substitute_all, check_plaintext, desugar_indices, stage_conditional]
 passes = [interpret, treeify_expr, comparison_folding, lambda t: t.normalize()]
 
