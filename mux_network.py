@@ -733,7 +733,7 @@ def codegen_mux(circuits: num_array, scalar=False):
     compiler = CompilerV2()
     outputs: list[list[int]] = [[cast(int, compiler.compile(bit).val) for bit in circuit.bits] for circuit in circuits.nums]
     print(f'Outputs: {outputs}')
-    input()
+    # input()
     print(f'{len(compiler.code)} instructions')
 
     # path = input('cached path? ')

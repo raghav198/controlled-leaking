@@ -42,7 +42,7 @@ def mux_network_codegen(challah_tree, program_name, mux_root = 'backends/muxes')
 
     vector_code, vouts, lanes, result = codegen_mux(network_array)
     print(vec_depth(vector_code))
-    input()
+    # input()
     
     # print('\n'.join(map(str, vector_code)))
     open(f'mux_schedules/{program_name}', 'w').write(f'lanes: {result.lanes}\nalignment: {result.alignment}')

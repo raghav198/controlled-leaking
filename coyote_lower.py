@@ -97,7 +97,7 @@ def compile_circuits(circuits: list[coyote_ast.Expression]):
     input("\n".join(map(str, comp.code)))
 
     result = vectorize(comp, extra_force_lanes=force_lanes, search_rounds=10)
-    input()
+    # input()
     
     # code = result.code
     # lanes = result.lanes
