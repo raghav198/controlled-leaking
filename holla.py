@@ -261,19 +261,26 @@ def substitute_all(expr: PitaExpr):
 
 
 def comparison_folding(tree: ChallahTree, known: list[tuple[ChallahLeaf, ChallahLeaf]] = [], equalities: EqNeq[ChallahLeaf] = EqNeq()):
+    """TODO: Correctly handle numbers"""
     match tree:
         case ChallahBranch(left, lt, right, true, false):
             if lt:
+                if (equalities.contains(left) and equalities.contains(right) and equalities.is_equivalent(left, right)) or left == right:
+                    return comparison_folding(false, known, equalities)
                 if (left, right) in known:
+                    print(f'Getting rid of {false} in {tree}: {left, right} in {known}')
                     return comparison_folding(true, known, equalities)
                 if (right, left) in known:
+                    print(f'Getting rid of {true} in {tree}: {right, left} in {known}')
                     return comparison_folding(false, known, equalities)
                 return ChallahBranch(left, lt, right, comparison_folding(true, known + [(left, right)], equalities), comparison_folding(false, known + [(right, left)], equalities))
             else:
                 if equalities.contains(left) and equalities.contains(right):
                     if equalities.is_unequal(left, right):
+                        print(f'Getting rid of {true} in {tree}: {equalities.all_classes(), equalities.uneq}')
                         return comparison_folding(false, known, equalities)
                     if equalities.is_equivalent(left, right):
+                        print(f'Getting rid of {false} in {tree}: {equalities.all_classes(), equalities.uneq}')
                         return comparison_folding(true, known, equalities)
                 
                 true_branch = equalities.copy()
