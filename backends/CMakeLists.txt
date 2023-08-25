@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
-set(TARGET "recursive_gcd.coil")
+set(TARGET "elem_3.coil")
 
 # set(COIL_PROGRAM "linear_oram")
 # set(MUX_PROGRAM "mux_test")

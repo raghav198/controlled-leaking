@@ -1,4 +1,4 @@
-start: expr
+?start: expr
 
 _list_of{x, sep}: x (sep x)*
 %import common.WS
@@ -7,20 +7,21 @@ _list_of{x, sep}: x (sep x)*
 %ignore SQL_COMMENT
 
 var: /[a-z][a-z0-9]*/
-op: "+" | "-" | "*"
+?op: "+" -> plus | "-" -> minus | "*" -> times
 ctxt: "&" /[0-9]+/
 arith: "(" num_expr op num_expr ")"
 let: "let" var "=" expr "in" num_expr
-cond_op: "<" | "=="
+cond_op: "<" -> lt | "==" -> eq
 cond: "if" "(" num_expr cond_op num_expr ")" "{" num_expr "}" "else" "{" num_expr "}"
-func_args: "(" _list_of{num_expr, ","} ")" 
-func_def: "\\" func_args "=>" "{" num_expr "}"
+func_args: "(" _list_of{num_expr, ","} ")"
+func_params: "(" _list_of{var, ","} ")"
+func_def: "\\" func_params "=>" "{" num_expr "}"
 func_call: var func_args
 index_expr: "@" num_expr "[" single_num_expr "]"
 single_array_update: single_num_expr ":=" single_num_expr
 array_update: "update" var "{" _list_of{single_array_update, ","} "}" "in" num_expr
-single_num_expr: cond | let | array_update | arith | ctxt | func_call | var | index_expr | /[0-9]+/
+?single_num_expr: cond | let | array_update | arith | ctxt | func_call | var | index_expr | /[0-9]+/ -> num_literal
 ctxt_array: "&" "[" /[0-9]+/ ":" /[0-9]+/ "]"
 new_array: "new" "[" /[0-9]+/ "]"
-num_expr: single_num_expr | ctxt_array | new_array | "[" _list_of{single_num_expr, ";"} "]"
-expr: func_def | num_expr
+?num_expr: single_num_expr | ctxt_array | new_array | "[" _list_of{single_num_expr, ";"} "]"
+?expr: func_def | num_expr

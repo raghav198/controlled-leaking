@@ -199,7 +199,7 @@ def to_cpp(code: list[VecInstr], vouts: list[int], output_lanes: list[list[int]]
             aliases[instr.dest] = zero_constant
         if isinstance(instr, VecBlendInstr):
             new_parts = [(val, mask) for val, mask in zip(instr.vals, instr.masks) if val not in all_zero]
-            instr.vals, instr.masks = zip(*new_parts)
+            instr.vals, instr.masks = cast(tuple[list[str], list[list[int]]], zip(*new_parts))
             
     code = [instr for instr in code if instr.dest not in all_zero]
     
@@ -447,7 +447,7 @@ def fixpoint(f):
     return inner
 
 
-def id_cache(f: Callable[[bit], bit]):
+def id_cache(f: Callable[[bit, bool], bit]):
     cache: dict[int, bit] = {}
     def inner(c: bit, debug=False) -> bit:
         if id(c) in cache:
@@ -458,7 +458,7 @@ def id_cache(f: Callable[[bit], bit]):
     return inner
 
 
-def logging(f: Callable[[bit], bit]):
+def logging(f: Callable[[bit, bool], bit]):
     def inner(c: bit, debug=False) -> bit:
         value = f(c, debug)
         if value != c:
@@ -486,7 +486,7 @@ def optimize(circuit: bit) -> bit:
     return clean(circuit)
     
 
-def mul_depth(circuit: bit):
+def mul_depth(circuit: bit) -> int:
     match circuit:
         case coyote_ast.Var(_):
             return 0
@@ -495,14 +495,14 @@ def mul_depth(circuit: bit):
                 return 1 + max(mul_depth(lhs), mul_depth(rhs))
             return max(mul_depth(lhs), mul_depth(rhs))
 
-def add_depth(circuit: bit):
+def add_depth(circuit: bit) -> int:
     match circuit:
         case coyote_ast.Var(_):
             return 0
         case coyote_ast.Op(op, lhs, rhs):
             if op == '+':
-                return 1 + max(mul_depth(lhs), mul_depth(rhs))
-            return max(mul_depth(lhs), mul_depth(rhs))
+                return 1 + max(add_depth(lhs), add_depth(rhs))
+            return max(add_depth(lhs), add_depth(rhs))
         
 
 def vec_depth(code: list[VecInstr]):
@@ -778,7 +778,7 @@ def codegen_mux(circuits: num_array, scalar=False):
     # for out in outputs:
     #     vouts.add(align[out])
     # vout, = vouts # there should only be one output vector
-    print(f'Outputs: {outs}')
-    print(f'Output lanes: {[lanes[out] for out in outs]}')
+    print(f'Outputs: {outputs[-1]}')
+    print(f'Output lanes: {[lanes[out] for out in outputs[-1]]}')
     
     return vectorized_code, rets, [[lanes[out] for out in outs] for outs in outputs], result

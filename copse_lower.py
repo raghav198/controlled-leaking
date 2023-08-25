@@ -72,7 +72,7 @@ CtxtModelDescription* COILMaurice::GenerateModel() {{
 
 
 
-def depth(tree: ChallahTree | Tree):
+def depth(tree: ChallahTree | Tree) -> int:
     if isinstance(tree, ChallahBranch):
         return max(depth(tree.true), depth(tree.false)) + 1
     if isinstance(tree, Branch):

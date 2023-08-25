@@ -14,4 +14,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     report_syntax_errors(args.file)
-    
+

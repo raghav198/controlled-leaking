@@ -6,17 +6,17 @@ from pyparsing import ParseException
 from copse_lower import generate_copse_cpp, generate_copse_data
 from coyote_lower import vectorize_decisions, vectorize_labels
 from holla import compile, pprint
+from lark_parse import parse_file
 from mux_network import add_depth, codegen_mux, codegen_scalar, mul_depth, num, optimize, optimize_circuit, to_cpp, to_mux_network, num_array, vec_depth
-from pita_parser import expr
 from syntax_errors import report_syntax_errors
 
 
-def coil_codegen(challah_tree, program_name, coil_root = 'backends/coil/coil_programs'):
+def coil_codegen(challah_tree, program_name: str, rounds, coil_root = 'backends/coil/coil_programs'):
     program_root = f'{coil_root}/{program_name}.coil'
     
-    left_code, right_code, lt_mask, eq_mask = vectorize_decisions(challah_tree)
-
-    label_code = vectorize_labels(challah_tree)
+    label_code = vectorize_labels(challah_tree, rounds)
+    left_code, right_code, lt_mask, eq_mask = vectorize_decisions(challah_tree, rounds)
+    
     masks, levels = generate_copse_data(challah_tree)
     model_code = generate_copse_cpp(masks, levels, program_name, eq_mask, lt_mask)
 
@@ -76,10 +76,11 @@ def cached_codegen(cache_path: str):
 
 def main(args):
     try:
-        pita_program = expr.parse_file(open(args.file, encoding='utf-8'), parse_all=True)[0]
+        # pita_program = expr.parse_file(open(args.file, encoding='utf-8'), parse_all=True)[0]
+        pita_program = parse_file(open(args.file, encoding='utf-8'))
     except ParseException as parse_exception:
         report_syntax_errors(args.file)
-        raise SystemExit(f'Parse error, exiting gracefully...') from parse_exception
+        raise SystemExit('Parse error, exiting gracefully...') from parse_exception
 
     challah_tree = compile(pita_program)
     
@@ -95,7 +96,7 @@ def main(args):
     elif args.backend == 'scalar':
         scalar_codegen(challah_tree, program_name)
     else:
-        coil_codegen(challah_tree, program_name)
+        coil_codegen(challah_tree, program_name, args.rounds)
 
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -104,6 +105,8 @@ if __name__ == '__main__':
 
     parser.add_argument('-b', '--backend', type=str, choices=['mux', 'coil', 'scalar'], default='coil')
     parser.add_argument('-s', '--show-tree', action='store_true', help='Show generated decision tree and exit')
+    
+    parser.add_argument('--rounds', type=int, default=10)
 
     # parser.add_argument('-e', '--entropy', type=float, help='Maximum allowed information leakage (in bits)')
     # parser.add_argument('-r', '--num-rounds', type=int, help='Maximum number of communication rounds allowed')

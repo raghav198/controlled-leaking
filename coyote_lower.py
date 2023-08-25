@@ -51,12 +51,12 @@ def compile_circuits_stupid(circuits: list[coyote_ast.Expression]):
     
     compiler = CompilerV2()
     
-    outputs = []
+    outputs: list[int] = []
     for expr in circuits:
         if isinstance(expr, coyote_ast.Op):
-            outputs.append(compiler.compile(expr).val)
+            outputs.append(cast(int, compiler.compile(expr).val))
         else:
-            outputs.append(compiler.compile(coyote_ast.Op('~', expr, expr)).val)
+            outputs.append(cast(int, compiler.compile(coyote_ast.Op('~', expr, expr)).val))
 
     alignment: list[int] = list(range(len(compiler.code)))
     lanes: list[int] = []
@@ -78,7 +78,7 @@ def compile_circuits_stupid(circuits: list[coyote_ast.Expression]):
     # input()
     return CodeObject(instructions=code, lanes=lanes, alignment=alignment, vector_width=len(outputs)), max(outputs) + 1, len(circuits)
 
-def compile_circuits(circuits: list[coyote_ast.Expression]):
+def compile_circuits(circuits: list[coyote_ast.Expression], rounds: int):
     if not circuits:
         return CodeObject(), None, 0
     # all the plain variables should be grouped
@@ -94,9 +94,9 @@ def compile_circuits(circuits: list[coyote_ast.Expression]):
 
     assert len(force_lanes.keys()) == len(circuits)
 
-    input("\n".join(map(str, comp.code)))
+    # input("\n".join(map(str, comp.code)))
 
-    result = vectorize(comp, extra_force_lanes=force_lanes, search_rounds=10)
+    result = vectorize(comp, extra_force_lanes=force_lanes, search_rounds=rounds)
     # input()
     
     # code = result.code
@@ -153,15 +153,16 @@ def compile_array_circuits_stupid(circuits: list[list[coyote_ast.Expression]]):
     print('\n'.join(map(str, code)))
     # input()
         
-    return CodeObject(instructions=code, lanes=lane, alignment=alignment, vector_width=max(map(len, array_idx_outputs.values()))), rets, len(circuits)
+    return CodeObject(instructions=code, lanes=lanes, alignment=alignment, vector_width=max(map(len, array_idx_outputs.values()))), rets, len(circuits)
     
     
             
 
-def compile_array_circuits(circuits: list[list[coyote_ast.Expression]]):
+def compile_array_circuits(circuits: list[list[coyote_ast.Expression]], rounds: int):
     group = {v.name for c in circuits for v in c if isinstance(v, coyote_ast.Var)}
+    # group = set()
     comp = CompilerV2(input_groups=[group]) if group else CompilerV2(input_groups=[])
-
+    
     force_lanes = {}
     array_idx_outputs: dict[int, list[int]] = defaultdict(list)
 
@@ -179,9 +180,11 @@ def compile_array_circuits(circuits: list[list[coyote_ast.Expression]]):
     assert len(force_lanes.keys()) == sum(map(len, circuits))
 
     # input('\n'.join(map(str, comp.code)))
-
+    comp.input_groups = []
     code = vectorize(comp, extra_force_lanes=force_lanes,
-                     output_groups=list(map(set, array_idx_outputs.values())), search_rounds=10)
+                     output_groups=list(map(set, array_idx_outputs.values())), search_rounds=rounds)
+    
+    # input('\n'.join(map(str, code.instructions)))
     
     # code = result.code
     # lanes = result.lanes
@@ -208,7 +211,7 @@ def compile_array_circuits(circuits: list[list[coyote_ast.Expression]]):
     return code, rets, len(circuits)
 
 
-def vectorize_decisions(tree: ChallahTree):
+def vectorize_decisions(tree: ChallahTree, rounds: int):
     try:
         lefts, rights, lt_mask = cast(tuple[list[coyote_ast.Expression], list[coyote_ast.Expression], list[bool]], zip(*parse_decision_circuits(tree)))
     except ValueError:
@@ -218,8 +221,8 @@ def vectorize_decisions(tree: ChallahTree):
 
     eq_mask = list(map(lambda b: not b, lt_mask))
 
-    left_code, left_vec, left_width = compile_circuits(lefts)
-    right_code, right_vec, right_width = compile_circuits(rights)
+    left_code, left_vec, left_width = compile_circuits(lefts, rounds)
+    right_code, right_vec, right_width = compile_circuits(rights, rounds)
 
     left_cpp = generate_coyote_kernel(left_code, f'COILLeftKernel', left_width, [f'__v{left_vec}'] if left_vec else [])
     right_cpp = generate_coyote_kernel(right_code, f'COILRightKernel', right_width, [f'__v{right_vec}'] if right_vec else [])
@@ -227,14 +230,14 @@ def vectorize_decisions(tree: ChallahTree):
     return left_cpp, right_cpp, ''.join(map(str, map(int, lt_mask))), ''.join(map(str, map(int, eq_mask)))
 
 
-def vectorize_labels(tree: ChallahTree):
+def vectorize_labels(tree: ChallahTree, rounds: int):
     label_circuits = parse_label_circuits(tree)
     # label_circuits = []
 
     # for slice in zip(*parse_label_circuits(tree)):
     #     label_circuits += list(slice)
 
-    code, vecs, width = compile_array_circuits(label_circuits)
+    code, vecs, width = compile_array_circuits(label_circuits, rounds)
     # print('\n'.join(map(str, code)))
     return generate_coyote_kernel(code, f'COILLabels', width, [f'__v{vec}' for vec in vecs])
 
