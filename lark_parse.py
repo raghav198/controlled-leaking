@@ -48,6 +48,9 @@ class ASTTransformer(lark.Transformer):
     def num_literal(self, items):
         return pita.PitaVarExpr(items[0].value)
     
+    def arr_literal(self, items):
+        return pita.PitaArrayExpr(items)
+    
         
     plus = lambda self, _: "+"
     minus = lambda self, _: "-"
