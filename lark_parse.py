@@ -25,10 +25,10 @@ class ASTTransformer(lark.Transformer):
         return list(items)
     
     def func_def(self, items):
-        return pita.PitaFuncDefExpr(items[0], items[1])
+        return pita.PitaFuncDefExpr(list(map(lambda v: v.name, items[0])), items[1])
     
     def func_call(self, items):
-        return pita.PitaFuncCallExpr(items[0], items[1])
+        return pita.PitaFuncCallExpr(items[0].name, items[1])
     
     def index_expr(self, items):
         return pita.PitaIndexExpr(items[0], items[1])
