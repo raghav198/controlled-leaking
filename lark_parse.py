@@ -37,14 +37,14 @@ class ASTTransformer(lark.Transformer):
         return tuple(items)
     
     def array_update(self, items):
-        return pita.PitaUpdateExpr(items[0], items[1], items[2])
+        print(f'Array update: {items[0], items[1:-1], items[-1]}')
+        return pita.PitaUpdateExpr(items[0].name, items[1:-1], items[-1])
     
     def ctxt_array(self, items):
-        print(f'ctxt_array {items[0].value}:{items[1].value}')
         return pita.PitaArrayExpr([pita.PitaVarExpr(f'input#{i}') for i in range(int(items[0].value), int(items[1].value) + 1)])
     
     def new_array(self, items):
-        return pita.PitaArrayExpr([pita.PitaVarExpr('0') for _ in range(items[0])])
+        return pita.PitaArrayExpr([pita.PitaVarExpr('0') for _ in range(int(items[0].value))])
     
     def num_literal(self, items):
         return pita.PitaVarExpr(items[0].value)
