@@ -40,7 +40,8 @@ class ASTTransformer(lark.Transformer):
         return pita.PitaUpdateExpr(items[0], items[1], items[2])
     
     def ctxt_array(self, items):
-        return pita.PitaArrayExpr([pita.PitaVarExpr(f'input#{i}') for i in range(items[0], items[1])])
+        print(f'ctxt_array {items[0].value}:{items[1].value}')
+        return pita.PitaArrayExpr([pita.PitaVarExpr(f'input#{i}') for i in range(int(items[0].value), int(items[1].value))])
     
     def new_array(self, items):
         return pita.PitaArrayExpr([pita.PitaVarExpr('0') for _ in range(items[0])])
