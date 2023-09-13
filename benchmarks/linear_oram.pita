@@ -9,6 +9,6 @@ let lookup = \(arr, start, end, index) => {
         }
     }
 } in 
-let array = &[0:16] in
+let array = &[0:15] in
 let idx = &16 in
 lookup(array, 0, 16, idx)
