@@ -7,6 +7,7 @@ from copse_lower import generate_copse_cpp, generate_copse_data
 from coyote_lower import vectorize_decisions, vectorize_labels
 from holla import compile, pprint
 from lark_parse import parse_file
+from pita_parser import *
 from mux_network import add_depth, codegen_mux, codegen_scalar, mul_depth, num, optimize, optimize_circuit, to_cpp, to_mux_network, num_array, vec_depth
 from syntax_errors import report_syntax_errors
 
@@ -76,8 +77,8 @@ def cached_codegen(cache_path: str):
 
 def main(args):
     try:
-        # pita_program = expr.parse_file(open(args.file, encoding='utf-8'), parse_all=True)[0]
-        pita_program = parse_file(open(args.file, encoding='utf-8'))
+        pita_program = expr.parse_file(open(args.file, encoding='utf-8'), parse_all=True)[0]
+        # pita_program = parse_file(open(args.file, encoding='utf-8'))
     except ParseException as parse_exception:
         report_syntax_errors(args.file)
         raise SystemExit('Parse error, exiting gracefully...') from parse_exception
