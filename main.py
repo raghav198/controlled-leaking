@@ -5,7 +5,7 @@ from pyparsing import ParseException
 
 from copse_lower import generate_copse_cpp, generate_copse_data
 from coyote_lower import vectorize_decisions, vectorize_labels
-from holla import compile, pprint
+from holla import pita_compile, pprint
 from lark_parse import parse_file
 from pita_parser import *
 from mux_network import add_depth, codegen_mux, codegen_scalar, mul_depth, num, optimize, optimize_circuit, to_cpp, to_mux_network, num_array, vec_depth
@@ -83,7 +83,7 @@ def main(args):
         report_syntax_errors(args.file)
         raise SystemExit('Parse error, exiting gracefully...') from parse_exception
 
-    challah_tree = compile(pita_program)
+    challah_tree = pita_compile(pita_program)
     
     if args.show_tree:
         pprint(challah_tree)

@@ -84,7 +84,7 @@ if __name__ == '__main__':
     argv.append('pita_examples/bubble.pita')
     program = expr.parse_string(open(argv[1]).read(), parse_all=True)[0]
     # print(program)
-    holla.pprint(holla.compile(program))
+    holla.pprint(holla.pita_compile(program))
 
 # ans = expr.parse_string('let min = \\(x, y) => { if (x < y) { x } else { y } } in min(a, b)', parse_all=True)
 # print(holla.compile(ans[0]))

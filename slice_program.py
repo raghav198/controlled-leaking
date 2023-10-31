@@ -1,4 +1,4 @@
-from holla import ChallahArray, ChallahBranch, ChallahTree, ChallahLeaf, ChallahVar, compile, pprint
+from holla import ChallahArray, ChallahBranch, ChallahTree, ChallahLeaf, ChallahVar, pita_compile, pprint
 from slicing_dp import Branch, Leaf, Tree, SliceCalculator, compute_N_slices
 from greedy_entropy import entropy_slice
 
@@ -124,7 +124,7 @@ if __name__ == '__main__':
     print(hll)
     print('-' * 10)
 
-    prog = compile(hll)
+    prog = pita_compile(hll)
     # pprint(prog)
     num_slices = 2
     entropy_limit = 4
