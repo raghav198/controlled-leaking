@@ -1,0 +1,3 @@
+[submodule "coyote_submodule"]
+	path = coyote_submodule
+	url = git@github.com:raghav198/coyote.git
