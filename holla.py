@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import reduce
-from typing import Callable
+from typing import Callable, TypeAlias
 
 from pita import (
     PitaArithExpr,
@@ -115,8 +115,8 @@ class ChallahBranch:
         return ChallahBranch(self.left, self.lt, self.right, true, false)
 
 
-ChallahLeaf = ChallahVar | ChallahArithExpr | ChallahArray
-ChallahTree = ChallahLeaf | list[ChallahLeaf] | ChallahBranch
+ChallahLeaf: TypeAlias = ChallahVar | ChallahArithExpr | ChallahArray
+ChallahTree: TypeAlias = ChallahLeaf | list[ChallahLeaf] | ChallahBranch
 
 
 def pprint(tree: ChallahTree, depth: int = 0, start=""):
