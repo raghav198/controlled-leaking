@@ -3,9 +3,9 @@ project(coil_backend VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 
-set(TARGET "elem_3.coil")
+set(TARGET "merge.xpert")
 
 # set(COIL_PROGRAM "linear_oram")
 # set(MUX_PROGRAM "mux_test")
@@ -40,8 +40,16 @@ get_filename_component(BASENAME ${TARGET} NAME_WE)
 add_executable(${TARGET} scalar/${BASENAME}.cpp scalar/main.cpp
     ${COMMON_SOURCES} ${COMMON_INCLUDES}
     ${COPSE_SOURCES} ${COPSE_INCLUDES})
-else()
 
+elseif(${TARGET} MATCHES ".xpert$")
+message("EXPERT!!")
+get_filename_component(BASENAME ${TARGET} NAME_WE)
+add_executable(${TARGET} expert/${BASENAME}.cpp
+    expert/common.hpp expert/common.cpp
+    ${COMMON_SOURCES} ${COMMON_INCLUDES}
+    ${COPSE_SOURCES} ${COPSE_INCLUDES})
+
+else()
 add_executable(${TARGET} manual/${TARGET}.cpp 
     manual/common.hpp manual/common.cpp
     ${COMMON_SOURCES} ${COMMON_INCLUDES}

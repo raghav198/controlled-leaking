@@ -576,7 +576,7 @@ def interpret(expr: PitaExpr, ctx_vars: dict[str, PitaNumExpr] = {}, ctx_funcs: 
     raise TypeError(type(expr))
 
 
-# comparison_folding = lambda x: x
+# comparison_folding = lambda x, *args, **kwargs: x
 # interpret_passes = [inline_all, substitute_all, check_plaintext, desugar_indices, stage_conditional]
 passes = [interpret, treeify_expr, lambda t: comparison_folding(t, known=[], equalities=EqNeq()), lambda t: t.normalize()]
 

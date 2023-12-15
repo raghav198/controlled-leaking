@@ -87,9 +87,9 @@ int main(int argc, char * argv[])
     // inp.add_arr({14, 15, 9, 13, 6, 16, 19, 10}); // array
     // inp.add_num(11); // threshold
 
-    // // merge
-    // inp.add_arr({7, 12, 17, 18, 20}); // array 1
-    // inp.add_arr({3, 5, 11, 14, 19}); // array 2
+    // merge
+    inp.add_arr({7, 12, 17, 18, 20}); // array 1
+    inp.add_arr({3, 5, 11, 14, 19}); // array 2
 
     // // sp_auction
     // inp.add_arr({13, 6, 11, 8, 3, 7, 17, 12}); // bids
@@ -106,8 +106,8 @@ int main(int argc, char * argv[])
     // inp.add_num(1); // k2
 
     // GCD
-    inp.add_num(21);
-    inp.add_num(28);
+    // inp.add_num(21);
+    // inp.add_num(28);
 
 
     ctxt_bit scratch = encrypt_vector(info, std::vector<long>());
@@ -153,7 +153,8 @@ int main(int argc, char * argv[])
 
     auto computed = std::chrono::high_resolution_clock::now();
 
-    if (left_kernel.output_wires.size() == 0) {
+    if (left_kernel.output_wires.size() == 0)
+    {
         std::cout << "skipping branches\n";
         std::cout << "Answer: [ ";
         for (auto answer_enc : label_kernel.output_wires) {
